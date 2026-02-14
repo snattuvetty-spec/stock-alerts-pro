@@ -1,0 +1,10 @@
+[
+  {
+    "symbol": "QBTS",
+    "target": 21.26,
+    "type": "below",
+    "enabled": true,
+    "created": "2026-02-10 12:29:38",
+    "last_notified": 1770690579.5321233
+  }
+]

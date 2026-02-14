@@ -1,0 +1,32 @@
+[
+  {
+    "symbol": "AAPL",
+    "target": 230.0,
+    "type": "above",
+    "enabled": true
+  },
+  {
+    "symbol": "TSLA",
+    "target": 350.0,
+    "type": "above",
+    "enabled": true
+  },
+  {
+    "symbol": "MSFT",
+    "target": 420.0,
+    "type": "below",
+    "enabled": true
+  },
+  {
+    "symbol": "NVDA",
+    "target": 140.0,
+    "type": "above",
+    "enabled": true
+  },
+  {
+    "symbol": "LAES",
+    "target": 4.01,
+    "type": "above",
+    "enabled": true
+  }
+]

@@ -1,8 +1,0 @@
-cookie:
-  expiry_days: 30
-  key: stock_alerts_auth_key
-  name: stock_alerts_cookie
-credentials:
-  usernames: {}
-preauthorized:
-  emails: []

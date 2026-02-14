@@ -1,0 +1,16 @@
+[
+  {
+    "symbol": "QBTS",
+    "target": 20.7,
+    "type": "below",
+    "enabled": true,
+    "created": "2026-02-09 11:59:02"
+  },
+  {
+    "symbol": "LAES",
+    "target": 4.01,
+    "type": "above",
+    "enabled": true,
+    "created": "2026-02-09 11:59:28"
+  }
+]

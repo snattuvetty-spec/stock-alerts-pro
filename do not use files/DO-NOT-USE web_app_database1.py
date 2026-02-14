@@ -1,0 +1,657 @@
+import streamlit as st
+import requests
+import os
+import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timedelta
+import pandas as pd
+from dotenv import load_dotenv
+import bcrypt
+from supabase import create_client, Client
+
+load_dotenv()
+
+# Initialize Supabase
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
+
+# Page config
+st.set_page_config(
+    page_title="Stock Price Alerts Pro",
+    page_icon="📊",
+    layout="wide"
+)
+
+# Auto-refresh every 2 minutes
+if 'last_refresh' not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
+current_time = time.time()
+if current_time - st.session_state.last_refresh > 120:  # 2 minutes
+    st.session_state.last_refresh = current_time
+    st.rerun()
+
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+def verify_password(password, hashed):
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
+def create_user(username, password, email, name):
+    try:
+        trial_ends = (datetime.now() + timedelta(days=21)).isoformat()
+        
+        result = supabase.table('users').insert({
+            'username': username,
+            'password_hash': hash_password(password),
+            'email': email,
+            'name': name,
+            'trial_ends': trial_ends,
+            'premium': False
+        }).execute()
+        
+        # Create default settings
+        supabase.table('user_settings').insert({
+            'username': username,
+            'email': '',
+            'email_enabled': False,
+            'telegram_enabled': False,
+            'notification_method': 'both'
+        }).execute()
+        
+        return True, "User created successfully"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
+def authenticate_user(username, password):
+    try:
+        result = supabase.table('users').select('*').eq('username', username).execute()
+        
+        if not result.data:
+            return False, None
+        
+        user = result.data[0]
+        if verify_password(password, user['password_hash']):
+            return True, user
+        return False, None
+    except:
+        return False, None
+
+def get_user_alerts(username):
+    result = supabase.table('alerts').select('*').eq('username', username).execute()
+    return result.data
+
+def save_alert(username, alert_data):
+    try:
+        supabase.table('alerts').insert({
+            'username': username,
+            'symbol': alert_data['symbol'],
+            'target': alert_data['target'],
+            'type': alert_data['type'],
+            'enabled': True
+        }).execute()
+        return True
+    except:
+        return False
+
+def delete_alert(alert_id):
+    try:
+        supabase.table('alerts').delete().eq('id', alert_id).execute()
+        return True
+    except:
+        return False
+
+def get_user_settings(username):
+    result = supabase.table('user_settings').select('*').eq('username', username).execute()
+    if result.data:
+        return result.data[0]
+    return None
+
+def update_user_settings(username, settings):
+    try:
+        supabase.table('user_settings').update(settings).eq('username', username).execute()
+        return True
+    except:
+        return False
+
+def get_account_status(user):
+    trial_ends = datetime.fromisoformat(user['trial_ends'])
+    now = datetime.now()
+    
+    if user['premium']:
+        return {
+            'status': 'premium',
+            'message': '✨ Premium Account',
+            'price_paid': user.get('premium_price', 'N/A')
+        }
+    
+    if now < trial_ends:
+        days_remaining = (trial_ends - now).days
+        return {
+            'status': 'trial',
+            'message': f'🎁 Free Trial ({days_remaining} days left)',
+            'upgrade_price': 2
+        }
+    
+    days_since_expired = (now - trial_ends).days
+    
+    if days_since_expired <= 30:
+        return {
+            'status': 'expired_early',
+            'message': f'⏰ Special Offer! ({30 - days_since_expired} days left)',
+            'upgrade_price': 2
+        }
+    else:
+        return {
+            'status': 'expired_late',
+            'message': '🔒 Trial Expired',
+            'upgrade_price': 4
+        }
+
+def upgrade_to_premium(username, price):
+    try:
+        supabase.table('users').update({
+            'premium': True,
+            'premium_price': price,
+            'premium_activated': datetime.now().isoformat()
+        }).eq('username', username).execute()
+        return True
+    except:
+        return False
+
+def send_telegram_message(message, chat_id=None):
+    try:
+        bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        if not chat_id:
+            chat_id = os.getenv('TELEGRAM_CHAT_ID')
+        
+        if not bot_token or not chat_id:
+            return False, "Telegram not configured"
+        
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        data = {'chat_id': chat_id, 'text': message, 'parse_mode': 'HTML'}
+        response = requests.post(url, data=data, timeout=10)
+        
+        return response.status_code == 200, "Sent"
+    except Exception as e:
+        return False, str(e)
+
+def send_email_alert(recipient_email, subject, message):
+    try:
+        sender_email = os.getenv('EMAIL_SENDER')
+        sender_password = os.getenv('EMAIL_PASSWORD')
+        smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        smtp_port = int(os.getenv('SMTP_PORT', 587))
+        
+        if not sender_email or not sender_password:
+            return False, "Email not configured"
+        
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = recipient_email
+        msg['Subject'] = subject
+        
+        html = f"""
+        <html>
+            <body style="font-family: Arial, sans-serif;">
+                <h2 style="color: #2E86AB;">Stock Price Alert</h2>
+                <div style="background-color: #f0f0f0; padding: 20px; border-radius: 5px;">
+                    {message}
+                </div>
+            </body>
+        </html>
+        """
+        msg.attach(MIMEText(html, 'html'))
+        
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.send_message(msg)
+        
+        return True, "Email sent"
+    except Exception as e:
+        return False, str(e)
+
+def get_stock_price(symbol):
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=5)
+        data = response.json()
+        
+        if 'chart' in data and 'result' in data['chart']:
+            result = data['chart']['result'][0]
+            current_price = result['meta']['regularMarketPrice']
+            previous_close = result['meta'].get('chartPreviousClose', current_price)
+            change = current_price - previous_close
+            change_percent = (change / previous_close) * 100 if previous_close else 0
+            
+            return {
+                'price': current_price,
+                'change': change,
+                'change_percent': change_percent
+            }
+        return None
+    except:
+        return None
+
+def check_and_send_alerts(alerts, settings, username):
+    triggered = []
+    
+    for alert in alerts:
+        if not alert.get('enabled', True):
+            continue
+        
+        stock_info = get_stock_price(alert['symbol'])
+        if not stock_info:
+            continue
+        
+        current_price = stock_info['price']
+        alert_triggered = False
+        
+        if alert['type'] == 'above' and current_price >= alert['target']:
+            alert_triggered = True
+        elif alert['type'] == 'below' and current_price <= alert['target']:
+            alert_triggered = True
+        
+        if alert_triggered:
+            last_notified = alert.get('last_notified')
+            if last_notified:
+                last_time = datetime.fromisoformat(last_notified)
+                if (datetime.now() - last_time).seconds < 3600:
+                    continue
+            
+            triggered.append({
+                'symbol': alert['symbol'],
+                'current_price': current_price,
+                'target': alert['target'],
+                'type': alert['type'],
+                'change_percent': stock_info['change_percent']
+            })
+            
+            # Update last notified
+            supabase.table('alerts').update({
+                'last_notified': datetime.now().isoformat()
+            }).eq('id', alert['id']).execute()
+            
+            # Log to alert history
+            supabase.table('alert_history').insert({
+                'username': username,
+                'symbol': alert['symbol'],
+                'price': current_price,
+                'target': alert['target'],
+                'type': alert['type']
+            }).execute()
+            
+            method = settings.get('notification_method', 'both')
+            
+            # Send Telegram
+            if settings.get('telegram_enabled') and method in ['telegram', 'both']:
+                msg = f"""🚀 <b>Stock Alert: {alert['symbol']}</b>
+
+💰 Current Price: <b>${current_price:.2f}</b>
+🎯 Your Target: ${alert['target']:.2f} ({alert['type']})
+📊 Change: {stock_info['change_percent']:+.2f}%
+
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+                chat_id = settings.get('telegram_chat_id') or None
+                send_telegram_message(msg, chat_id)
+            
+            # Send Email
+            if settings.get('email_enabled') and settings.get('email') and method in ['email', 'both']:
+                subject = f"🚀 Stock Alert: {alert['symbol']}"
+                change_color = 'green' if stock_info['change_percent'] >= 0 else 'red'
+                
+                email_message = f"""
+                <p><strong>🚀 Stock Alert: {alert['symbol']}</strong></p>
+                <hr>
+                <p><strong>💰 Current Price:</strong> <span style="font-size: 18px; color: #2E86AB;">${current_price:.2f}</span></p>
+                <p><strong>🎯 Your Target:</strong> ${alert['target']:.2f} ({alert['type']})</p>
+                <p><strong>📊 Change:</strong> <span style="color: {change_color};">{stock_info['change_percent']:+.2f}%</span></p>
+                <hr>
+                <p style="color: #666; font-size: 12px;">⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                """
+                
+                send_email_alert(settings['email'], subject, email_message)
+    
+    return triggered
+
+# Session state
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+
+# Login/Signup
+if not st.session_state.logged_in:
+    st.title("📊 Stock Price Alerts Pro")
+st.markdown("### Welcome! Please login or create an account")
+
+# Disclaimer
+with st.expander("⚠️ Important Disclaimer - Please Read"):
+    st.markdown("""
+    **DISCLAIMER - Natts Digital**
+    
+    Stock Alerts Pro is a **price notification service only**.
+    
+    - ❌ We do NOT provide financial advice
+    - ❌ We do NOT recommend buying or selling any securities
+    - ❌ We are NOT an Australian Financial Services (AFS) licensee
+    - ✅ We ONLY notify you when stocks reach your chosen price points
+    
+    All investment decisions are made solely by you. 
+    Past price movements do not guarantee future performance.
+    Always consult a licensed financial advisor before 
+    making any investment decisions.
+    
+    **Natts Digital Pty Ltd is a technology company, 
+    not a financial services provider.**
+    """)
+    
+    tab1, tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
+    
+    with tab1:
+        st.subheader("Login")
+        login_username = st.text_input("Username", key="login_user")
+        login_password = st.text_input("Password", type="password", key="login_pass")
+        
+        if st.button("Login", type="primary", use_container_width=True):
+            success, user = authenticate_user(login_username, login_password)
+            if success:
+                st.session_state.logged_in = True
+                st.session_state.username = user['username']
+                st.session_state.user = user
+                st.rerun()
+            else:
+                st.error("❌ Invalid credentials")
+    
+    with tab2:
+        st.subheader("Create Account")
+        new_name = st.text_input("Full Name", key="signup_name")
+        new_email = st.text_input("Email", key="signup_email")
+        new_username = st.text_input("Username", key="signup_user")
+        new_password = st.text_input("Password", type="password", key="signup_pass")
+        new_password_confirm = st.text_input("Confirm Password", type="password", key="signup_pass_confirm")
+        
+        if st.button("Create Account", type="primary", use_container_width=True):
+            if not all([new_name, new_email, new_username, new_password]):
+                st.error("❌ Please fill all fields")
+            elif new_password != new_password_confirm:
+                st.error("❌ Passwords don't match")
+            elif len(new_password) < 6:
+                st.error("❌ Password must be 6+ characters")
+            else:
+                success, message = create_user(new_username, new_password, new_email, new_name)
+                if success:
+                    st.success("✅ Account created! Please login.")
+                else:
+                    st.error(f"❌ {message}")
+
+# Logged in section
+        else:
+    # Safety check - ensure session state is initialized
+    if 'username' not in st.session_state or st.session_state.username is None:
+        st.session_state.logged_in = False
+        st.rerun()
+    
+    username = st.session_state.username
+    user = st.session_state.user
+    
+    # Safety check for user object
+    if user is None:
+        st.session_state.logged_in = False
+        st.rerun()
+    
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = 'dashboard'
+    
+    account_status = get_account_status(user)
+    
+    # Sidebar
+    with st.sidebar:
+        st.title(f"👋 {user['name']}")
+        st.info(account_status['message'])
+        
+        if not user['premium']:
+            st.warning(f"💰 Upgrade: ${account_status['upgrade_price']}/month")
+            if st.button("⭐ Upgrade", use_container_width=True, type="primary"):
+                st.session_state.current_page = 'upgrade'
+                st.rerun()
+        
+        st.markdown("---")
+        
+        if st.button("🏠 Dashboard", use_container_width=True):
+            st.session_state.current_page = 'dashboard'
+            st.rerun()
+        
+        if st.button("⚙️ Settings", use_container_width=True):
+            st.session_state.current_page = 'settings'
+            st.rerun()
+        
+        if st.button("➕ Add Alert", use_container_width=True):
+            st.session_state.current_page = 'add_alert'
+            st.rerun()
+        
+        st.markdown("---")
+        
+        alerts = get_user_alerts(username)
+        alert_limit = 10
+        
+        st.caption(f"📊 Alerts: {len(alerts)}/{alert_limit if not user['premium'] else '∞'}")
+        
+        st.markdown("---")
+        
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.logged_in = False
+            st.rerun()
+    
+    # Pages
+    if st.session_state.current_page == 'upgrade':
+        st.title("⭐ Upgrade to Premium")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown("### Premium Features")
+            st.markdown("""
+            - ✅ Unlimited alerts
+            - ✅ Priority notifications
+            - ✅ Email + Telegram
+            - ✅ Price charts (coming soon)
+            - ✅ Multiple watchlists (coming soon)
+            """)
+        
+        with col2:
+            price = account_status['upgrade_price']
+            st.success(f"### ${price}/month")
+            st.warning("⚠️ Demo - Payment not implemented")
+            
+            if st.button("✅ Activate Premium (Demo)", type="primary"):
+                upgrade_to_premium(username, price)
+                st.success("🎉 Premium activated!")
+                time.sleep(2)
+                st.rerun()
+    
+    elif st.session_state.current_page == 'settings':
+        st.title("⚙️ Settings")
+        
+        settings = get_user_settings(username)
+        
+        method = st.radio(
+            "Notification Method:",
+            ['both', 'email', 'telegram'],
+            format_func=lambda x: {'both': '📧+📱 Both', 'email': '📧 Email', 'telegram': '📱 Telegram'}[x],
+            index=['both', 'email', 'telegram'].index(settings.get('notification_method', 'both'))
+        )
+        
+        st.markdown("---")
+        st.subheader("📱 Telegram")
+        telegram_enabled = st.toggle("Enable", value=settings.get('telegram_enabled', False))
+        
+        with st.expander("ℹ️ How to get Chat ID"):
+            st.markdown("""
+            1. Search for `@userinfobot` on Telegram
+            2. Send any message
+            3. Bot replies with your Chat ID
+            4. Paste it below (optional)
+            """)
+        
+        telegram_chat_id = st.text_input("Chat ID (optional)", value=settings.get('telegram_chat_id', ''))
+        
+        if telegram_enabled:
+            if st.button("Test Telegram"):
+                success, _ = send_telegram_message("✅ Test!", telegram_chat_id or None)
+                if success:
+                    st.success("✅ Sent!")
+                else:
+                    st.error("❌ Failed")
+        
+        st.markdown("---")
+        st.subheader("📧 Email")
+        email_enabled = st.toggle("Enable Email", value=settings.get('email_enabled', False))
+        
+        if email_enabled:
+            user_email = st.text_input("Your Email", value=settings.get('email', ''))
+            
+            if user_email and st.button("Test Email"):
+                success, _ = send_email_alert(user_email, "Test", "<p>Test!</p>")
+                if success:
+                    st.success("✅ Sent!")
+                else:
+                    st.error("❌ Failed")
+        else:
+            user_email = ""
+        
+        st.markdown("---")
+        
+        if st.button("💾 Save", type="primary"):
+            update_user_settings(username, {
+                'notification_method': method,
+                'telegram_enabled': telegram_enabled,
+                'telegram_chat_id': telegram_chat_id,
+                'email_enabled': email_enabled,
+                'email': user_email
+            })
+            st.success("✅ Saved!")
+    
+    elif st.session_state.current_page == 'add_alert':
+        st.title("➕ Add Alert")
+        
+        alerts = get_user_alerts(username)
+        alert_limit = 10
+        
+        if len(alerts) >= alert_limit and not user['premium']:
+            st.error(f"🔒 Limit reached ({alert_limit})")
+            if st.button("⭐ Upgrade"):
+                st.session_state.current_page = 'upgrade'
+                st.rerun()
+        else:
+            symbol = st.text_input("Symbol", placeholder="AAPL").upper()
+            
+            if symbol:
+                stock_info = get_stock_price(symbol)
+                if stock_info:
+                    st.metric("Current", f"${stock_info['price']:.2f}", f"{stock_info['change_percent']:+.2f}%")
+                    
+                    target = st.number_input("Target Price", min_value=0.01, value=float(stock_info['price']))
+                    alert_type = st.selectbox("Alert When", ["above", "below"])
+                    
+                    if st.button("Create", type="primary"):
+                        if save_alert(username, {
+                            'symbol': symbol,
+                            'target': target,
+                            'type': alert_type
+                        }):
+                            st.success("✅ Created!")
+                            time.sleep(1)
+                            st.session_state.current_page = 'dashboard'
+                            st.rerun()
+                else:
+                    st.error("Invalid symbol")
+    
+    else:
+        st.title("📊 Dashboard")
+        st.caption("⏱️ Auto-refreshes every 2 minutes")
+        
+        alerts = get_user_alerts(username)
+        
+        if not alerts:
+            st.info("No alerts yet!")
+        else:
+            settings = get_user_settings(username)
+            triggered = check_and_send_alerts(alerts, settings, username)
+            
+            if triggered:
+                st.success("🎯 ALERTS TRIGGERED!")
+                for alert in triggered:
+                    st.warning(f"**{alert['symbol']}**: ${alert['current_price']:.2f}")
+            
+            alert_data = []
+            for alert in alerts:
+                stock_info = get_stock_price(alert['symbol'])
+                if stock_info:
+                    status = "⏳ Waiting"
+                    if alert['type'] == 'above' and stock_info['price'] >= alert['target']:
+                        status = "🚀 TRIGGERED!"
+                    elif alert['type'] == 'below' and stock_info['price'] <= alert['target']:
+                        status = "📉 TRIGGERED!"
+                    
+                    alert_data.append({
+                        'Symbol': alert['symbol'],
+                        'Current': f"${stock_info['price']:.2f}",
+                        'Target': f"${alert['target']:.2f}",
+                        'Type': alert['type'].upper(),
+                        'Status': status,
+                        'id': alert['id']
+                    })
+            
+            df = pd.DataFrame(alert_data)
+            df_display = df.drop('id', axis=1)
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
+            
+            st.markdown("---")
+            st.subheader("Manage")
+            cols = st.columns(4)
+            for idx, alert in enumerate(alert_data):
+                col = cols[idx % 4]
+                with col:
+                    if st.button(f"❌ {alert['Symbol']}", key=f"del_{idx}"):
+                        delete_alert(alert['id'])
+                        st.rerun()
+
+# Footer - appears on ALL pages (outside all if/else blocks - NO indentation)
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #aaa; font-size: 11px; padding: 10px 0 20px 0; line-height: 2;'>
+⚠️ Stock Alerts Pro provides price notifications only. This is NOT financial advice.<br>
+Natts Digital is not an AFS licensee. Always consult a licensed financial advisor before making investment decisions.<br><br>
+<a href='#' style='color: #aaa; text-decoration: none;'>Terms & Disclaimer</a> &nbsp;|&nbsp; 
+<a href='#' style='color: #aaa; text-decoration: none;'>Privacy Policy</a> &nbsp;|&nbsp;
+© 2026 Natts Digital. All rights reserved.
+</div>
+""", unsafe_allow_html=True)
+#```
+
+#---
+
+## ⚠️ Critical - Indentation:
+
+#The footer must have **ZERO indentation** (at the left edge) because it needs to appear on **ALL pages**, not just inside the dashboard block.
+
+#It should look like this in VS Code:
+#```
+st.rerun()
+
+# Footer
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #aaa; font-size: 11px; padding: 10px 0 20px 0; line-height: 2;'>
+⚠️ Stock Alerts Pro provides price notifications only. This is NOT financial advice.<br>
+Natts Digital is not an AFS licensee. Always consult a licensed financial advisor before making investment decisions.<br><br>
+<a href='#' style='color: #aaa; text-decoration: none;'>Terms & Disclaimer</a> &nbsp;|&nbsp; 
+<a href='#' style='color: #aaa; text-decoration: none;'>Privacy Policy</a> &nbsp;|&nbsp;
+2026 Natts Digital. All rights reserved.
+</div>
+""", unsafe_allow_html=True)

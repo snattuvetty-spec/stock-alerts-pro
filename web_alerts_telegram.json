@@ -1,0 +1,82 @@
+[
+  {
+    "symbol": "LAES",
+    "target": 4.25,
+    "type": "above",
+    "enabled": true,
+    "created": "2026-02-09 21:18:31",
+    "last_notified": 0
+  },
+  {
+    "symbol": "LAES",
+    "target": 3.8,
+    "type": "below",
+    "enabled": true,
+    "created": "2026-02-09 21:18:49",
+    "last_notified": 0
+  },
+  {
+    "symbol": "UEC",
+    "target": 18.0,
+    "type": "above",
+    "enabled": true,
+    "created": "2026-02-09 21:19:49",
+    "last_notified": 0
+  },
+  {
+    "symbol": "UEC",
+    "target": 15.0,
+    "type": "below",
+    "enabled": true,
+    "created": "2026-02-09 21:20:01",
+    "last_notified": 0
+  },
+  {
+    "symbol": "AAPL",
+    "target": 250.0,
+    "type": "below",
+    "enabled": true,
+    "created": "2026-02-09 21:22:11",
+    "last_notified": 0
+  },
+  {
+    "symbol": "QBTS",
+    "target": 21.2,
+    "type": "below",
+    "enabled": true,
+    "created": "2026-02-10 12:07:55",
+    "last_notified": 0
+  },
+  {
+    "symbol": "QBTS",
+    "target": 21.22,
+    "type": "above",
+    "enabled": true,
+    "created": "2026-02-10 12:08:40",
+    "last_notified": 0
+  },
+  {
+    "symbol": "UEC",
+    "target": 17.2,
+    "type": "below",
+    "enabled": true,
+    "created": "2026-02-10 12:11:21",
+    "last_notified": 1770689483.3626845
+  },
+  {
+    "symbol": "QBTS",
+    "target": 21.22,
+    "type": "below",
+    "enabled": true,
+    "created": "2026-02-10 12:12:09",
+    "last_notified": 1770689537.6876092
+  },
+  {
+    "symbol": "AAPL",
+    "target": 276.0,
+    "type": "below",
+    "enabled": true,
+    "created": "2026-02-10 12:15:04",
+    "last_notified": 1770689712.4458141
+  }
+]

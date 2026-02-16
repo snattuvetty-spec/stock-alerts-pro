@@ -641,133 +641,123 @@ if st.session_state.logged_in:
                     st.error("Invalid symbol")
 
     # ---- DASHBOARD ----
+else:
+    st.title("📊 Dashboard")
+    st.caption("⏱️ Auto-refreshes every 2 minutes")
+
+    alerts = get_user_alerts(username)
+
+    if not alerts:
+        st.info("No alerts set yet! Tap ➕ Add Alert to get started.")
+
     else:
-        st.title("📊 Dashboard")
-        st.caption("⏱️ Auto-refreshes every 2 minutes")
+        settings = get_user_settings(username)
+        triggered = check_and_send_alerts(alerts, settings, username)
 
-        alerts = get_user_alerts(username)
+        if triggered:
+            st.success("🎯 ALERTS TRIGGERED!")
+            for alert in triggered:
+                st.warning(f"**{alert['symbol']}**: ${alert['current_price']:.2f}")
 
-        if not alerts:
-            st.info("No alerts set yet! Tap ➕ Add Alert to get started.")
-        else:
-            settings = get_user_settings(username)
-            triggered = check_and_send_alerts(alerts, settings, username)
+        # =====================================================
+        # BUILD ALERT DATA
+        # =====================================================
+        alert_list = []
 
-            if triggered:
-                st.success("🎯 ALERTS TRIGGERED!")
-                for alert in triggered:
-                    st.warning(f"**{alert['symbol']}**: ${alert['current_price']:.2f}")
+        for alert in alerts:
+            stock_info = get_stock_price(alert['symbol'])
+            if not stock_info:
+                continue
 
-            # Build alert data list
-            alert_list = []
+            current_price = stock_info['price']
+            change_pct = stock_info['change_percent']
 
-            for idx, alert in enumerate(alerts):
-                stock_info = get_stock_price(alert['symbol'])
-                if not stock_info:
-                    continue
+            alert_list.append({
+                **alert,
+                "current_price": current_price,
+                "change_pct": change_pct,
+            })
 
-                current_price = stock_info['price']
-                change_pct = stock_info['change_percent']
-                change_color = "#27ae60" if change_pct >= 0 else "#e74c3c"
-                change_arrow = "▲" if change_pct >= 0 else "▼"
+        # =====================================================
+        # ALERT CARDS (NO HTML TABLE ANYMORE)
+        # =====================================================
+        for a in alert_list:
 
-                status = "⏳ Waiting"
-                status_color = "#888888"
-                if alert['type'] == 'above' and current_price >= alert['target']:
-                    status = "🚀 TRIGGERED!"
-                    status_color = "#27ae60"
-                elif alert['type'] == 'below' and current_price <= alert['target']:
-                    status = "📉 TRIGGERED!"
-                    status_color = "#e74c3c"
+            with st.container():
+                col1, col2, col3, col4, col5 = st.columns([2,2,2,2,3])
 
-                type_badge = "🔼 ABOVE" if alert['type'] == 'above' else "🔽 BELOW"
-                news_url = f"https://finance.yahoo.com/quote/{alert['symbol']}/news"
+                with col1:
+                    st.markdown(f"### {a['symbol']}")
 
-                alert_list.append({
-                    **alert,
-                    'current_price': current_price,
-                    'change_pct': change_pct,
-                    'change_color': change_color,
-                    'change_arrow': change_arrow,
-                    'status': status,
-                    'status_color': status_color,
-                    'type_badge': type_badge,
-                    'news_url': news_url,
-                })
+                with col2:
+                    st.metric(
+                        "Price",
+                        f"${a['current_price']:.2f}",
+                        f"{a['change_pct']:+.2f}%"
+                    )
 
-            # ---- HTML Table - horizontally scrollable on mobile ----
-            import streamlit.components.v1 as components
+                with col3:
+                    st.write(f"🎯 ${a['target']:.2f}")
 
-            rows_html = ""
-            for idx, a in enumerate(alert_list):
-                row_bg = "#ffffff" if idx % 2 == 0 else "#f7f9fc"
-                rows_html += f"""
-                <tr style="background:{row_bg};">
-                    <td><strong>{a['symbol']}</strong></td>
-                    <td><strong>${a['current_price']:.2f}</strong><br>
-                        <span style="color:{a['change_color']};font-size:11px;">
-                            {a['change_arrow']}{abs(a['change_pct']):.2f}%
-                        </span>
-                    </td>
-                    <td>${a['target']:.2f}</td>
-                    <td style="white-space:nowrap;">{a['type_badge']}</td>
-                    <td style="color:{a['status_color']};font-weight:bold;white-space:nowrap;">{a['status']}</td>
-                    <td style="text-align:center;">
-                        <a href="{a['news_url']}" target="_blank"
-                           style="text-decoration:none;font-size:18px;">&#128240;</a>
-                    </td>
-                    
+                with col4:
+                    st.write(f"📌 {a['type'].upper()}")
 
+                with col5:
+                    edit_col, del_col = st.columns(2)
 
-                </tr>"""
+                    with edit_col:
+                        if st.button("✏️ Edit", key=f"edit_{a['id']}"):
+                            st.session_state[f"editing_{a['id']}"] = True
+                            st.rerun()
 
-            table_html = f"""
-            <style>
-                * {{ box-sizing: border-box; }}
-                body {{ margin:0; padding:0; font-family: Arial, sans-serif; }}
-                .table-wrap {{
-                    width:100%;
-                    overflow-x:auto;
-                    -webkit-overflow-scrolling:touch;
-                }}
-                table {{
-                    min-width:600px;
-                    width:100%;
-                    border-collapse:collapse;
-                    font-size:13px;
-                }}
-                th {{
-                    background:#2E86AB;
-                    color:white;
-                    padding:10px 12px;
-                    text-align:left;
-                    font-size:12px;
-                    white-space:nowrap;
-                }}
-                td {{
-                    padding:10px 12px;
-                    border-bottom:1px solid #eee;
-                    vertical-align:middle;
-                }}
-            </style>
-            <div class="table-wrap">
-            <table>
-                <thead><tr>
-                    <th>Symbol</th>
-                    <th>Price</th>
-                    <th>Target</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th>News</th>
-                    
-                </tr></thead>
-                <tbody>{rows_html}</tbody>
-            </table>
-            </div>"""
+                    with del_col:
+                        if st.button("🗑 Delete", key=f"delete_{a['id']}"):
+                            delete_alert(a['id'])
+                            st.success("Deleted!")
+                            st.rerun()
 
-            # Generous height - 55px per row + 60px header, ensures all rows visible on mobile
-            table_height = 60 + (len(alert_list) * 65)
-            components.html(table_html, height=table_height, scrolling=False)
+            # =========================
+            # INLINE EDIT PANEL
+            # =========================
+            if st.session_state.get(f"editing_{a['id']}", False):
+
+                st.markdown("---")
+                st.write(f"Editing **{a['symbol']}**")
+
+                new_target = st.number_input(
+                    "New Target Price",
+                    min_value=0.01,
+                    value=float(a['target']),
+                    key=f"new_target_{a['id']}"
+                )
+
+                new_type = st.selectbox(
+                    "Alert When",
+                    ["above", "below"],
+                    index=0 if a['type']=="above" else 1,
+                    key=f"new_type_{a['id']}"
+                )
+
+                save_col, cancel_col = st.columns(2)
+
+                with save_col:
+                    if st.button("💾 Save", key=f"save_{a['id']}"):
+                        supabase.table('alerts').update({
+                            'target': new_target,
+                            'type': new_type
+                        }).eq('id', a['id']).execute()
+
+                        st.session_state[f"editing_{a['id']}"] = False
+                        st.success("Updated!")
+                        st.rerun()
+
+                with cancel_col:
+                    if st.button("✖ Cancel", key=f"cancel_{a['id']}"):
+                        st.session_state[f"editing_{a['id']}"] = False
+                        st.rerun()
+
+                st.markdown("---")
+
 
 
 

@@ -23,8 +23,7 @@ def get_secret(key, default=None):
     except (KeyError, FileNotFoundError):
         return os.getenv(key, default)
 
-# Initialize Supabase (Split Access Model)
-url = get_secret("SUPABASE_URL")
+
 
 # Initialize Supabase (Clean Secure Setup)
 url = get_secret("SUPABASE_URL")

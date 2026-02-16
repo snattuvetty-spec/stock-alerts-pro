@@ -428,15 +428,15 @@ else:
     account_status = get_account_status(user)
 
 # ============================================================
-# MOBILE TOP NAV (REAL FIX - NO HTML LINKS)
+# MOBILE TOP NAV (REAL STREAMLIT VERSION)
 # ============================================================
 
 st.markdown("""
 <style>
-.mobile-topnav { display:none; }
 @media (max-width:768px){
-    .mobile-topnav{ display:block; margin-bottom:10px; }
-    section[data-testid="stSidebar"]{ display:none !important; }
+    section[data-testid="stSidebar"]{
+        display:none !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -467,6 +467,7 @@ if st.session_state.logged_in:
         if st.button("🚪", key="m_logout"):
             st.session_state.logged_in = False
             st.rerun()
+
 
 
 

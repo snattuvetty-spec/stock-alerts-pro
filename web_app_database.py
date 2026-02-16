@@ -772,45 +772,7 @@ if st.session_state.logged_in:
 
 
 
-    # ===== EDIT PANEL =====
-    if st.session_state.get(f'editing_{a["id"]}', False):
-
-        st.markdown("---")
-        st.write(f"Editing **{a['symbol']}**")
-
-        new_target = st.number_input(
-            "New Target Price",
-            min_value=0.01,
-            value=float(a['target']),
-            key=f"new_target_{a['id']}"
-        )
-
-        new_type = st.selectbox(
-            "Alert When",
-            ["above", "below"],
-            index=0 if a['type']=="above" else 1,
-            key=f"new_type_{a['id']}"
-        )
-
-        save_col, cancel_col = st.columns(2)
-
-        with save_col:
-            if st.button("💾 Save", key=f"save_{a['id']}"):
-                supabase.table('alerts').update({
-                    'target': new_target,
-                    'type': new_type
-                }).eq('id', a['id']).execute()
-
-                st.session_state[f'editing_{a["id"]}'] = False
-                st.success("Updated!")
-                st.rerun()
-
-        with cancel_col:
-            if st.button("✖ Cancel", key=f"cancel_{a['id']}"):
-                st.session_state[f'editing_{a["id"]}'] = False
-                st.rerun()
-
-        st.markdown("---")
+    
 
 
 

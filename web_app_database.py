@@ -87,7 +87,7 @@ def create_user(username, password, email, name):
 def authenticate_user(username, password):
     try:
         # Case-insensitive username search
-        result = supabase_public.table('users').select('*').execute()
+        result = supabase_admin.table('users').select('*').execute()
         for user in result.data:
             if user['username'].lower() == username.lower():
                 if verify_password(password, user['password_hash']):

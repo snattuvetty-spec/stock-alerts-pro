@@ -26,18 +26,12 @@ def get_secret(key, default=None):
 # Initialize Supabase (Split Access Model)
 url = get_secret("SUPABASE_URL")
 
-# 🔒 Admin key (secret)
+# Initialize Supabase (Clean Secure Setup)
+url = get_secret("SUPABASE_URL")
 admin_key = get_secret("SUPABASE_KEY")
 
-# 🔓 Public key (publishable)
-public_key = get_secret("SUPABASE_PUBLIC_KEY")
+supabase: Client = create_client(url, admin_key)
 
-# Admin client - full access
-supabase_admin: Client = create_client(url, admin_key)
-
-# Public client - limited access
-supabase_public: Client = create_client(url, public_key)
-supabase = supabase_admin
 
 # Page config
 st.set_page_config(
@@ -87,7 +81,7 @@ def create_user(username, password, email, name):
 def authenticate_user(username, password):
     try:
         # Case-insensitive username search
-        result = supabase_admin.table('users').select('*').execute()
+        result = supabase.table('users').select('*').execute()
         for user in result.data:
             if user['username'].lower() == username.lower():
                 if verify_password(password, user['password_hash']):
@@ -97,7 +91,7 @@ def authenticate_user(username, password):
         return False, None
 
 def get_user_alerts(username):
-    result = supabase_admin.table('alerts').select('*').eq('username', username).execute()
+    result = supabase.table('alerts').select('*').eq('username', username).execute()
     return result.data
 
 def save_alert(username, alert_data):
@@ -121,7 +115,7 @@ def delete_alert(alert_id):
         return False
 
 def get_user_settings(username):
-    result = supabase_public.table('user_settings').select('*').eq('username', username).execute()
+    result = supabase.table('user_settings').select('*').eq('username', username).execute()
     if result.data:
         return result.data[0]
     return None

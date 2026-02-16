@@ -427,78 +427,22 @@ else:
 
     account_status = get_account_status(user)
 
-    # ============================================================
-    # NAVIGATION - Dropdown on mobile, Sidebar on desktop
-    # ============================================================
-    alerts_count = get_user_alerts(username)
-    alert_limit = 10
+# ============================================================
+# MOBILE TOP NAV (REAL FIX - NO HTML LINKS)
+# ============================================================
 
-    # Mobile top nav using selectbox (always works, no JS needed)
-    st.markdown("""
-    <style>
-    .mobile-only { display: none; }
-    .desktop-only { display: block; }
-    @media (max-width: 768px) {
-        .mobile-only { display: block; }
-        section[data-testid="stSidebar"] { display: none !important; }
-    }
-    </style>
-    """, unsafe_allow_html=True)
+st.markdown("""
+<style>
+.mobile-topnav { display:none; }
+@media (max-width:768px){
+    .mobile-topnav{ display:block; margin-bottom:10px; }
+    section[data-testid="stSidebar"]{ display:none !important; }
+}
+</style>
+""", unsafe_allow_html=True)
 
-    # Mobile top bar - pure HTML so it stays horizontal always
-    page = st.session_state.get('current_page', 'dashboard')
-
-    def nav_style(p):
-        if page == p:
-            return "background:#2E86AB;color:white;border:none;border-radius:8px;padding:8px 0;width:100%;font-size:22px;cursor:pointer;"
-        return "background:#f0f2f6;color:#555;border:none;border-radius:8px;padding:8px 0;width:100%;font-size:22px;cursor:pointer;"
-
-    st.markdown(f"""
-    <style>
-    .mobile-topnav {{
-        display: none;
-    }}
-    @media (max-width: 768px) {{
-        .mobile-topnav {{
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
-            gap: 6px;
-            padding: 8px 4px 12px 4px;
-            background: white;
-            border-bottom: 1px solid #eee;
-            margin-bottom: 10px;
-            align-items: center;
-        }}
-        .mobile-topnav .username {{
-            font-weight: bold;
-            font-size: 14px;
-            color: #333;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }}
-        .mobile-topnav .nav-btn {{
-            background: #f0f2f6;
-            border: none;
-            border-radius: 8px;
-            padding: 10px 4px;
-            font-size: 20px;
-            text-align: center;
-            cursor: pointer;
-            text-decoration: none;
-            display: block;
-        }}
-        .mobile-topnav .nav-btn.active {{
-            background: #2E86AB;
-        }}
-        section[data-testid="stSidebar"] {{
-            display: none !important;
-        }}
-    }}
-    </style>
-
-    # MOBILE TOP NAV (SAFE VERSION - NO PAGE RELOADS)
 if st.session_state.logged_in:
+
     col_user, col_home, col_add, col_set, col_logout = st.columns([2,1,1,1,1])
 
     with col_user:
@@ -526,7 +470,33 @@ if st.session_state.logged_in:
 
 
 
+    # ============================================================
+    # NAVIGATION - Dropdown on mobile, Sidebar on desktop
+    # ============================================================
+    alerts_count = get_user_alerts(username)
+    alert_limit = 10
+
+    # Mobile top nav using selectbox (always works, no JS needed)
+    st.markdown("""
+    <style>
+    .mobile-only { display: none; }
+    .desktop-only { display: block; }
+    @media (max-width: 768px) {
+        .mobile-only { display: block; }
+        section[data-testid="stSidebar"] { display: none !important; }
+    }
+    </style>
     """, unsafe_allow_html=True)
+
+    # Mobile top bar - pure HTML so it stays horizontal always
+    page = st.session_state.get('current_page', 'dashboard')
+
+    def nav_style(p):
+        if page == p:
+            return "background:#2E86AB;color:white;border:none;border-radius:8px;padding:8px 0;width:100%;font-size:22px;cursor:pointer;"
+        return "background:#f0f2f6;color:#555;border:none;border-radius:8px;padding:8px 0;width:100%;font-size:22px;cursor:pointer;"
+
+    
 
     
 
@@ -745,18 +715,9 @@ if st.session_state.logged_in:
                         <a href="{a['news_url']}" target="_blank"
                            style="text-decoration:none;font-size:18px;">&#128240;</a>
                     </td>
-                    <td style="white-space:nowrap;">
-                        <button onclick="window.parent.postMessage({{action:'edit',id:'{a['id']}'}}, '*')"
-                            style="background:#2E86AB;color:white;border:none;border-radius:4px;
-                                   padding:6px 12px;cursor:pointer;font-size:13px;margin-right:4px;">
-                            &#9999; Edit
-                        </button>
-                        <button onclick="window.parent.postMessage({{action:'delete',id:'{a['id']}'}}, '*')"
-                            style="background:#e74c3c;color:white;border:none;border-radius:4px;
-                                   padding:6px 12px;cursor:pointer;font-size:13px;">
-                            &#128465; Del
-                        </button>
-                    </td>
+                    
+
+
                 </tr>"""
 
             table_html = f"""
@@ -797,7 +758,7 @@ if st.session_state.logged_in:
                     <th>Type</th>
                     <th>Status</th>
                     <th>News</th>
-                    <th>Actions</th>
+                    
                 </tr></thead>
                 <tbody>{rows_html}</tbody>
             </table>
@@ -807,42 +768,81 @@ if st.session_state.logged_in:
             table_height = 60 + (len(alert_list) * 65)
             components.html(table_html, height=table_height, scrolling=False)
 
-            # ---- Edit Forms (shown when edit is triggered) ----
-            for idx, a in enumerate(alert_list):
-                if st.session_state.get(f'editing_{a["id"]}', False):
-                    st.markdown(
-                        f"<div style='background:#f0f7fb; padding:14px; "
-                        f"border-left:4px solid #2E86AB; border-radius:6px; margin:8px 0;'>",
-                        unsafe_allow_html=True
-                    )
-                    st.markdown(f"**✏️ Editing: {a['symbol']}** — ${a['target']:.2f} {a['type'].upper()}")
-                    ecol1, ecol2 = st.columns(2)
-                    with ecol1:
-                        new_target = st.number_input(
-                            "New Target Price", min_value=0.01,
-                            value=float(a['target']),
-                            key=f"new_target_{a['id']}"
-                        )
-                    with ecol2:
-                        new_type = st.selectbox(
-                            "Alert When", ["above", "below"],
-                            index=0 if a['type'] == 'above' else 1,
-                            key=f"new_type_{a['id']}"
-                        )
-                    sc, cc = st.columns(2)
-                    with sc:
-                        if st.button("💾 Save", key=f"save_{a['id']}", type="primary", use_container_width=True):
-                            supabase.table('alerts').update({
-                                'target': new_target, 'type': new_type
-                            }).eq('id', a['id']).execute()
-                            st.session_state[f'editing_{a["id"]}'] = False
-                            st.success("✅ Updated!")
-                            st.rerun()
-                    with cc:
-                        if st.button("✖ Cancel", key=f"cancel_{a['id']}", use_container_width=True):
-                            st.session_state[f'editing_{a["id"]}'] = False
-                            st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
+# ============================================================
+# STREAMLIT ACTION BUTTONS (EDIT / DELETE)
+# ============================================================
+
+st.markdown("### ✏️ Manage Alerts")
+
+for a in alert_list:
+
+    with st.container():
+        c1, c2, c3, c4 = st.columns([3,2,2,3])
+
+        with c1:
+            st.write(f"**{a['symbol']}**")
+
+        with c2:
+            st.write(f"${a['target']:.2f}")
+
+        with c3:
+            st.write(a['type'].upper())
+
+        with c4:
+            edit_col, del_col = st.columns(2)
+
+            with edit_col:
+                if st.button("✏️ Edit", key=f"edit_{a['id']}"):
+                    st.session_state[f'editing_{a['id']}'] = True
+                    st.rerun()
+
+            with del_col:
+                if st.button("🗑 Delete", key=f"delete_{a['id']}"):
+                    delete_alert(a['id'])
+                    st.success("Deleted!")
+                    st.rerun()
+
+
+    # ===== EDIT PANEL =====
+    if st.session_state.get(f'editing_{a["id"]}', False):
+
+        st.markdown("---")
+        st.write(f"Editing **{a['symbol']}**")
+
+        new_target = st.number_input(
+            "New Target Price",
+            min_value=0.01,
+            value=float(a['target']),
+            key=f"new_target_{a['id']}"
+        )
+
+        new_type = st.selectbox(
+            "Alert When",
+            ["above", "below"],
+            index=0 if a['type']=="above" else 1,
+            key=f"new_type_{a['id']}"
+        )
+
+        save_col, cancel_col = st.columns(2)
+
+        with save_col:
+            if st.button("💾 Save", key=f"save_{a['id']}"):
+                supabase.table('alerts').update({
+                    'target': new_target,
+                    'type': new_type
+                }).eq('id', a['id']).execute()
+
+                st.session_state[f'editing_{a["id"]}'] = False
+                st.success("Updated!")
+                st.rerun()
+
+        with cancel_col:
+            if st.button("✖ Cancel", key=f"cancel_{a['id']}"):
+                st.session_state[f'editing_{a["id"]}'] = False
+                st.rerun()
+
+        st.markdown("---")
+
 
 
 # ============================================================

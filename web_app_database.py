@@ -794,7 +794,7 @@ for a in alert_list:
 
             with edit_col:
                 if st.button("✏️ Edit", key=f"edit_{a['id']}"):
-                    st.session_state[f'editing_{a['id']}'] = True
+                    st.session_state[f"editing_{a['id']}"] = True
                     st.rerun()
 
             with del_col:

@@ -80,15 +80,29 @@ def create_user(username, password, email, name):
 
 def authenticate_user(username, password):
     try:
-        # Case-insensitive username search
-        result = supabase.table('users').select('*').execute()
-        for user in result.data:
-            if user['username'].lower() == username.lower():
-                if verify_password(password, user['password_hash']):
-                    return True, user
+        # Query only the matching username (case-insensitive)
+        result = (
+            supabase
+            .table('users')
+            .select('*')
+            .ilike('username', username)
+            .limit(1)
+            .execute()
+        )
+
+        if not result.data:
+            return False, None
+
+        user = result.data[0]
+
+        if verify_password(password, user['password_hash']):
+            return True, user
+
         return False, None
-    except:
+
+    except Exception as e:
         return False, None
+
 
 def get_user_alerts(username):
     result = supabase.table('alerts').select('*').eq('username', username).execute()

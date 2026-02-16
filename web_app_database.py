@@ -97,7 +97,7 @@ def authenticate_user(username, password):
         return False, None
 
 def get_user_alerts(username):
-    result = supabase_public.table('alerts').select('*').eq('username', username).execute()
+    result = supabase_admin.table('alerts').select('*').eq('username', username).execute()
     return result.data
 
 def save_alert(username, alert_data):

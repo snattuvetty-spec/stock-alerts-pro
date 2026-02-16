@@ -497,28 +497,38 @@ else:
     }}
     </style>
 
-    <div class="mobile-topnav">
-        <div class="username">👋 {user['name'].split()[0]}</div>
-        <a class="nav-btn {'active' if page == 'dashboard' else ''}"
-           href="?page=dashboard">🏠</a>
-        <a class="nav-btn {'active' if page == 'add_alert' else ''}"
-           href="?page=add_alert">➕</a>
-        <a class="nav-btn {'active' if page == 'settings' else ''}"
-           href="?page=settings">⚙️</a>
-        <a class="nav-btn" href="?page=logout">🚪</a>
-    </div>
+    # MOBILE TOP NAV (SAFE VERSION - NO PAGE RELOADS)
+if st.session_state.logged_in:
+    col_user, col_home, col_add, col_set, col_logout = st.columns([2,1,1,1,1])
+
+    with col_user:
+        st.markdown(f"👋 **{user['name'].split()[0]}**")
+
+    with col_home:
+        if st.button("🏠", key="m_home"):
+            st.session_state.current_page = "dashboard"
+            st.rerun()
+
+    with col_add:
+        if st.button("➕", key="m_add"):
+            st.session_state.current_page = "add_alert"
+            st.rerun()
+
+    with col_set:
+        if st.button("⚙️", key="m_set"):
+            st.session_state.current_page = "settings"
+            st.rerun()
+
+    with col_logout:
+        if st.button("🚪", key="m_logout"):
+            st.session_state.logged_in = False
+            st.rerun()
+
+
+
     """, unsafe_allow_html=True)
 
-    # Handle URL params from mobile nav
-    params = st.query_params
-    if 'page' in params:
-        nav = params['page']
-        st.query_params.clear()
-        if nav == 'logout':
-            st.session_state.logged_in = False
-        else:
-            st.session_state.current_page = nav
-        st.rerun()
+    
 
     # Sidebar for desktop
     with st.sidebar:

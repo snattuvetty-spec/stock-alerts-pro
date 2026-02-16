@@ -769,39 +769,7 @@ if st.session_state.logged_in:
             table_height = 60 + (len(alert_list) * 65)
             components.html(table_html, height=table_height, scrolling=False)
 
-# ============================================================
-# STREAMLIT ACTION BUTTONS (EDIT / DELETE)
-# ============================================================
 
-st.markdown("### ✏️ Manage Alerts")
-
-for a in alert_list:
-
-    with st.container():
-        c1, c2, c3, c4 = st.columns([3,2,2,3])
-
-        with c1:
-            st.write(f"**{a['symbol']}**")
-
-        with c2:
-            st.write(f"${a['target']:.2f}")
-
-        with c3:
-            st.write(a['type'].upper())
-
-        with c4:
-            edit_col, del_col = st.columns(2)
-
-            with edit_col:
-                if st.button("✏️ Edit", key=f"edit_{a['id']}"):
-                    st.session_state[f"editing_{a['id']}"] = True
-                    st.rerun()
-
-            with del_col:
-                if st.button("🗑 Delete", key=f"delete_{a['id']}"):
-                    delete_alert(a['id'])
-                    st.success("Deleted!")
-                    st.rerun()
 
 
     # ===== EDIT PANEL =====

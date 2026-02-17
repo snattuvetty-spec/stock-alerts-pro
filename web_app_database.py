@@ -1,20 +1,24 @@
-# ============================================================
-# ULTRA PRO STOCK ALERTS APP
-# ============================================================
-
 import streamlit as st
 import requests
 import os
 import time
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
+from datetime import datetime
 import bcrypt
 from supabase import create_client, Client
 
 # ============================================================
-# SECRETS LOADER
+# CONFIG
+# ============================================================
+
+st.set_page_config(
+    page_title="Stock Alerts Pro",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# ============================================================
+# SECRETS
 # ============================================================
 
 def get_secret(key, default=None):
@@ -23,123 +27,71 @@ def get_secret(key, default=None):
     except:
         return os.getenv(key, default)
 
-# ============================================================
-# SUPABASE
-# ============================================================
-
-SUPABASE_URL = get_secret("SUPABASE_URL")
-SUPABASE_KEY = get_secret("SUPABASE_KEY")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+url = get_secret("SUPABASE_URL")
+key = get_secret("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
 
 # ============================================================
-# PAGE CONFIG
+# HELPERS
 # ============================================================
-
-st.set_page_config(
-    page_title="Stock Price Alerts Pro",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-# ============================================================
-# AUTO REFRESH
-# ============================================================
-
-if "last_refresh" not in st.session_state:
-    st.session_state.last_refresh = time.time()
-
-if time.time() - st.session_state.last_refresh > 120:
-    st.session_state.last_refresh = time.time()
-    st.rerun()
-
-# ============================================================
-# SECURITY HELPERS
-# ============================================================
-
-def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 def verify_password(password, hashed):
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
-# ============================================================
-# DATABASE FUNCTIONS
-# ============================================================
-
-def authenticate_user(username, password):
-    result = (
-        supabase.table("users")
-        .select("*")
-        .ilike("username", username)
-        .limit(1)
-        .execute()
-    )
-
-    if not result.data:
-        return False, None
-
-    user = result.data[0]
-
-    if verify_password(password, user["password_hash"]):
-        return True, user
-
-    return False, None
-
-
-def get_user_alerts(username):
-    res = supabase.table("alerts").select("*").eq("username", username).execute()
-    return res.data or []
-
-
-def save_alert(username, data):
-    supabase.table("alerts").insert({
-        "username": username,
-        "symbol": data["symbol"],
-        "target": data["target"],
-        "type": data["type"],
-        "enabled": True
-    }).execute()
-
-
-def delete_alert(alert_id):
-    supabase.table("alerts").delete().eq("id", alert_id).execute()
-
-
-def update_alert(alert_id, target, alert_type):
-    supabase.table("alerts").update({
-        "target": target,
-        "type": alert_type
-    }).eq("id", alert_id).execute()
-
-# ============================================================
-# STOCK PRICE
-# ============================================================
-
 def get_stock_price(symbol):
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-        r = requests.get(url, timeout=5).json()
-
-        result = r["chart"]["result"][0]["meta"]
-        price = result["regularMarketPrice"]
-        prev = result.get("chartPreviousClose", price)
-        change_pct = ((price - prev) / prev) * 100 if prev else 0
-
-        return price, change_pct
+        headers = {"User-Agent":"Mozilla/5.0"}
+        r = requests.get(url,headers=headers,timeout=5)
+        data = r.json()
+        return data["chart"]["result"][0]["meta"]["regularMarketPrice"]
     except:
-        return None, None
+        return None
+
+def authenticate_user(username,password):
+    try:
+        result = (
+            supabase
+            .table("users")
+            .select("*")
+            .ilike("username",username)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return False,None
+        user = result.data[0]
+        if verify_password(password,user["password_hash"]):
+            return True,user
+        return False,None
+    except:
+        return False,None
+
+def get_user_alerts(username):
+    result = supabase.table("alerts").select("*").eq("username",username).execute()
+    return result.data
+
+def save_alert(username,symbol,target,atype):
+    supabase.table("alerts").insert({
+        "username":username,
+        "symbol":symbol,
+        "target":target,
+        "type":atype,
+        "enabled":True
+    }).execute()
+
+def delete_alert(alert_id):
+    supabase.table("alerts").delete().eq("id",alert_id).execute()
 
 # ============================================================
 # SESSION INIT
 # ============================================================
 
 if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+    st.session_state.logged_in=False
 
 if "current_page" not in st.session_state:
-    st.session_state.current_page = "dashboard"
+    st.session_state.current_page="dashboard"
 
 # ============================================================
 # LOGIN PAGE
@@ -147,66 +99,62 @@ if "current_page" not in st.session_state:
 
 if not st.session_state.logged_in:
 
-    st.title("📊 Stock Price Alerts Pro")
+    st.title("📊 Stock Alerts Pro")
 
-    with st.form("login"):
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
-        submit = st.form_submit_button("Login")
+    tab1,tab2=st.tabs(["🔐 Login","📝 Sign Up"])
 
-    if submit:
-        ok, user = authenticate_user(u, p)
-        if ok:
-            st.session_state.logged_in = True
-            st.session_state.user = user
-            st.session_state.username = user["username"]
-            st.rerun()
-        else:
-            st.error("Invalid login")
+    with tab1:
+        u=st.text_input("Username")
+        p=st.text_input("Password",type="password")
+
+        if st.button("Login",use_container_width=True):
+            ok,user=authenticate_user(u,p)
+            if ok:
+                st.session_state.logged_in=True
+                st.session_state.username=user["username"]
+                st.session_state.user=user
+                st.rerun()
+            else:
+                st.error("Invalid login")
 
     st.stop()
 
 # ============================================================
-# USER SESSION
+# USER CONTEXT
 # ============================================================
 
-user = st.session_state.user
-username = st.session_state.username
+username=st.session_state.username
+user=st.session_state.user
 
 # ============================================================
-# MOBILE TOP NAV (SAFE)
+# MOBILE TOP NAV
 # ============================================================
 
 st.markdown("""
 <style>
-@media(max-width:768px){
-    section[data-testid="stSidebar"]{display:none !important;}
+@media (max-width:768px){
+section[data-testid="stSidebar"]{display:none!important;}
 }
 </style>
-""", unsafe_allow_html=True)
+""",unsafe_allow_html=True)
 
-c1,c2,c3,c4,c5 = st.columns([2,1,1,1,1])
+col_user,col_home,col_add,col_logout=st.columns([3,1,1,1])
 
-with c1:
+with col_user:
     st.markdown(f"👋 **{user['name'].split()[0]}**")
 
-with c2:
-    if st.button("🏠", key="home"):
+with col_home:
+    if st.button("🏠",key="m_home"):
         st.session_state.current_page="dashboard"
         st.rerun()
 
-with c3:
-    if st.button("➕", key="add"):
-        st.session_state.current_page="add"
+with col_add:
+    if st.button("➕",key="m_add"):
+        st.session_state.current_page="add_alert"
         st.rerun()
 
-with c4:
-    if st.button("⚙️", key="settings"):
-        st.session_state.current_page="settings"
-        st.rerun()
-
-with c5:
-    if st.button("🚪", key="logout"):
+with col_logout:
+    if st.button("🚪",key="m_logout"):
         st.session_state.logged_in=False
         st.rerun()
 
@@ -217,15 +165,15 @@ with c5:
 with st.sidebar:
     st.title(user["name"])
 
-    if st.button("Dashboard"):
+    if st.button("Dashboard",use_container_width=True):
         st.session_state.current_page="dashboard"
         st.rerun()
 
-    if st.button("Add Alert"):
-        st.session_state.current_page="add"
+    if st.button("Add Alert",use_container_width=True):
+        st.session_state.current_page="add_alert"
         st.rerun()
 
-    if st.button("Logout"):
+    if st.button("Logout",use_container_width=True):
         st.session_state.logged_in=False
         st.rerun()
 
@@ -233,105 +181,83 @@ with st.sidebar:
 # ADD ALERT PAGE
 # ============================================================
 
-if st.session_state.current_page=="add":
+if st.session_state.current_page=="add_alert":
 
     st.title("➕ Add Alert")
 
-    symbol = st.text_input("Symbol").upper()
+    symbol=st.text_input("Symbol").upper()
 
     if symbol:
-        price,change = get_stock_price(symbol)
-
+        price=get_stock_price(symbol)
         if price:
-            st.metric("Current Price", f"${price:.2f}", f"{change:+.2f}%")
+            st.metric("Current Price",f"${price:.2f}")
+            target=st.number_input("Target",min_value=0.01,value=float(price))
+            atype=st.selectbox("Type",["above","below"])
 
-            target = st.number_input("Target", value=float(price))
-            alert_type = st.selectbox("Type",["above","below"])
-
-            if st.button("Create Alert"):
-                save_alert(username,{
-                    "symbol":symbol,
-                    "target":target,
-                    "type":alert_type
-                })
-                st.success("Created!")
+            if st.button("Create Alert",type="primary"):
+                save_alert(username,symbol,target,atype)
+                st.success("Created")
                 st.session_state.current_page="dashboard"
                 st.rerun()
-
-    st.stop()
+        else:
+            st.error("Invalid symbol")
 
 # ============================================================
-# DASHBOARD
+# DASHBOARD (🔥 FIXED DESKTOP VERSION)
 # ============================================================
 
-st.title("📊 Dashboard")
+else:
 
-alerts = get_user_alerts(username)
+    st.title("📊 Dashboard")
 
-if not alerts:
-    st.info("No alerts yet.")
-    st.stop()
+    alerts=get_user_alerts(username)
 
-# -------- ALERT TABLE --------
+    if not alerts:
+        st.info("No alerts yet.")
+    else:
 
-for a in alerts:
+        h1,h2,h3,h4,h5,h6=st.columns([3,2,2,1,1,1])
 
-    price,change = get_stock_price(a["symbol"])
+        h1.markdown("**Symbol**")
+        h2.markdown("**Price**")
+        h3.markdown("**Target**")
+        h4.markdown("**News**")
+        h5.markdown("**Edit**")
+        h6.markdown("**Delete**")
 
-    with st.container():
-        col1,col2,col3,col4,col5 = st.columns([3,2,2,1,1])
+        st.divider()
 
-        with col1:
-            st.write(f"**{a['symbol']}**")
+        for a in alerts:
 
-        with col2:
-            st.write(f"${price:.2f}" if price else "-")
+            price=get_stock_price(a["symbol"])
 
-        with col3:
-            st.write(f"${a['target']:.2f} ({a['type']})")
+            c1,c2,c3,c4,c5,c6=st.columns([3,2,2,1,1,1])
 
-        with col4:
-            if st.button("✏️", key=f"edit_{a['id']}"):
-                st.session_state[f"editing_{a['id']}"]=True
+            with c1:
+                st.write(a["symbol"])
 
-        with col5:
-            if st.button("🗑", key=f"del_{a['id']}"):
-                delete_alert(a["id"])
-                st.rerun()
+            with c2:
+                st.write(f"${price:.2f}" if price else "-")
 
-    # -------- INLINE EDIT --------
-    if st.session_state.get(f"editing_{a['id']}", False):
+            with c3:
+                st.write(f"${a['target']:.2f} ({a['type']})")
 
-        new_target = st.number_input(
-            "New Target",
-            value=float(a["target"]),
-            key=f"target_{a['id']}"
-        )
+            with c4:
+                st.link_button("📰",f"https://finance.yahoo.com/quote/{a['symbol']}/news")
 
-        new_type = st.selectbox(
-            "Type",
-            ["above","below"],
-            index=0 if a["type"]=="above" else 1,
-            key=f"type_{a['id']}"
-        )
+            with c5:
+                if st.button("✏️",key=f"edit_{a['id']}"):
+                    st.session_state[f"editing_{a['id']}"]=True
+                    st.rerun()
 
-        c1,c2 = st.columns(2)
-
-        with c1:
-            if st.button("Save", key=f"save_{a['id']}"):
-                update_alert(a["id"], new_target, new_type)
-                st.session_state[f"editing_{a['id']}"]=False
-                st.rerun()
-
-        with c2:
-            if st.button("Cancel", key=f"cancel_{a['id']}"):
-                st.session_state[f"editing_{a['id']}"]=False
-                st.rerun()
+            with c6:
+                if st.button("🗑",key=f"delete_{a['id']}"):
+                    delete_alert(a["id"])
+                    st.rerun()
 
 # ============================================================
 # FOOTER
 # ============================================================
 
 st.markdown("---")
-st.caption("© Natts Digital - Alerts Only. Not Financial Advice. Pls consult your Financial Advisor for any investment decisions.")
-
+st.caption("© Natts Digital — Alerts Only. Not Financial Advice.")

@@ -39,6 +39,21 @@ def get_stock_price(symbol):
 # ============================================================
 
 st.set_page_config(page_title="Stock Alerts Pro", layout="wide")
+st.markdown("""
+<style>
+.scroll-row {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 8px;
+}
+
+.scroll-inner {
+    min-width: 750px;   /* forces horizontal scroll on mobile */
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 
 # ============================================================
 # SIMPLE LOGIN (FIELD READY — NO AUTO LOGIN MAGIC)
@@ -104,7 +119,8 @@ for a in alerts:
 
     price = get_stock_price(a["symbol"])
 
-    # ===== ULTRA PRO RESPONSIVE ROW =====
+    st.markdown('<div class="scroll-row"><div class="scroll-inner">', unsafe_allow_html=True)
+
     col1, col2, col3, col4, col5, col6 = st.columns(
         [2.2, 1.2, 2.2, 1.2, 1.2, 1.2]
     )
@@ -120,20 +136,22 @@ for a in alerts:
 
     with col4:
         st.link_button(
-            "📰",
+            "📰 News",
             f"https://finance.yahoo.com/quote/{a['symbol']}/news"
         )
 
     with col5:
-        if st.button("✏️", key=f"edit_{a['id']}"):
+        if st.button("✏️ Edit", key=f"edit_{a['id']}"):
             st.session_state[f"editing_{a['id']}"] = True
 
     with col6:
-        if st.button("🗑", key=f"del_{a['id']}"):
+        if st.button("🗑 Delete", key=f"del_{a['id']}"):
             delete_alert(a["id"])
             st.rerun()
 
-    # ===== INLINE EDIT PANEL =====
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
+    # INLINE EDIT PANEL
     if st.session_state.get(f"editing_{a['id']}", False):
 
         new_target = st.number_input(
@@ -167,6 +185,7 @@ for a in alerts:
                 st.rerun()
 
     st.divider()
+
 
 
 # ============================================================

@@ -207,6 +207,21 @@ if st.session_state.current_page == 'add_alert':
     st.stop()
 
 # ============================================================
+# HANDLE QUERY PARAM ACTIONS (edit/delete triggered from table)
+# ============================================================
+params = st.query_params
+if 'action' in params:
+    action = params.get('action')
+    aid = params.get('id')
+    st.query_params.clear()
+    if action == 'delete' and aid:
+        delete_alert(aid)
+        st.rerun()
+    elif action == 'edit' and aid:
+        st.session_state[f'editing_{aid}'] = True
+        st.rerun()
+
+# ============================================================
 # DASHBOARD
 # ============================================================
 
@@ -218,163 +233,79 @@ if not alerts:
     st.info("No alerts yet. Click ➕ Add to create your first alert!")
     st.stop()
 
-# ============================================================
-# BUILD ALERT DATA WITH PRICES
-# ============================================================
-
 import streamlit.components.v1 as components
 
 alert_list = []
 for a in alerts:
     price = get_stock_price(a["symbol"])
     current = f"${price:.2f}" if price else "—"
-
     status = "⏳ Waiting"
     status_color = "#888"
     if price:
-        if a['type'] == 'above' and price >= a['target']:
+        if a["type"] == "above" and price >= a["target"]:
             status = "🚀 TRIGGERED!"
             status_color = "#27ae60"
-        elif a['type'] == 'below' and price <= a['target']:
+        elif a["type"] == "below" and price <= a["target"]:
             status = "📉 TRIGGERED!"
             status_color = "#e74c3c"
-
     news_url = f"https://finance.yahoo.com/quote/{a['symbol']}/news"
+    alert_list.append({**a, "current": current, "status": status, "status_color": status_color, "news_url": news_url})
 
-    alert_list.append({
-        **a,
-        'current': current,
-        'status': status,
-        'status_color': status_color,
-        'news_url': news_url,
-    })
-
-# ============================================================
-# HTML TABLE
-# ============================================================
-
+# Build HTML table - buttons navigate via URL query params (works across iframes!)
 rows_html = ""
 for i, a in enumerate(alert_list):
     bg = "#ffffff" if i % 2 == 0 else "#f7f9fc"
-    type_badge = "🔼 ABOVE" if a['type'] == 'above' else "🔽 BELOW"
+    type_badge = "🔼 ABOVE" if a["type"] == "above" else "🔽 BELOW"
     rows_html += f"""
     <tr style="background:{bg};">
-        <td><strong>{a['symbol']}</strong></td>
-        <td>{a['current']}</td>
-        <td>${a['target']:.2f}</td>
+        <td><strong>{a["symbol"]}</strong></td>
+        <td>{a["current"]}</td>
+        <td>${a["target"]:.2f}</td>
         <td style="white-space:nowrap;">{type_badge}</td>
-        <td style="color:{a['status_color']};font-weight:bold;white-space:nowrap;">{a['status']}</td>
-        <td style="text-align:center;">
-            <a href="{a['news_url']}" target="_blank"
-               style="text-decoration:none;font-size:18px;">&#128240;</a>
-        </td>
+        <td style="color:{a["status_color"]};font-weight:bold;white-space:nowrap;">{a["status"]}</td>
+        <td style="text-align:center;"><a href="{a["news_url"]}" target="_blank" style="font-size:18px;text-decoration:none;">📰</a></td>
         <td style="white-space:nowrap;">
-            <button onclick="document.getElementById('edit_btn_{i}').click()"
-                style="background:#2E86AB;color:white;border:none;border-radius:4px;
-                       padding:6px 12px;cursor:pointer;font-size:13px;margin-right:4px;">
-                &#9999; Edit
+            <button onclick="window.top.location.href=window.top.location.pathname+'?action=edit&id={a["id"]}'"
+                style="background:#2E86AB;color:white;border:none;border-radius:4px;padding:6px 12px;cursor:pointer;font-size:13px;margin-right:4px;">
+                ✏️ Edit
             </button>
-            <button onclick="document.getElementById('del_btn_{i}').click()"
-                style="background:#e74c3c;color:white;border:none;border-radius:4px;
-                       padding:6px 12px;cursor:pointer;font-size:13px;">
-                &#128465; Del
+            <button onclick="if(confirm('Delete {a["symbol"]}?'))window.top.location.href=window.top.location.pathname+'?action=delete&id={a["id"]}'"
+                style="background:#e74c3c;color:white;border:none;border-radius:4px;padding:6px 12px;cursor:pointer;font-size:13px;">
+                🗑️ Del
             </button>
         </td>
     </tr>"""
 
-table_html = f"""
-<style>
-    * {{ box-sizing:border-box; margin:0; padding:0; }}
-    body {{ font-family: Arial, sans-serif; }}
-    .wrap {{
-        width:100%;
-        overflow-x:auto;
-        -webkit-overflow-scrolling:touch;
-    }}
-    table {{
-        min-width:650px;
-        width:100%;
-        border-collapse:collapse;
-        font-size:13px;
-    }}
-    th {{
-        background:#2E86AB;
-        color:white;
-        padding:10px 10px;
-        text-align:left;
-        white-space:nowrap;
-        font-size:12px;
-    }}
-    td {{
-        padding:10px 10px;
-        border-bottom:1px solid #eee;
-        vertical-align:middle;
-    }}
+table_html = f"""<style>
+*{{box-sizing:border-box;margin:0;padding:0;}}
+body{{font-family:Arial,sans-serif;}}
+.wrap{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}}
+table{{min-width:650px;width:100%;border-collapse:collapse;font-size:13px;}}
+th{{background:#2E86AB;color:white;padding:10px;text-align:left;white-space:nowrap;font-size:12px;}}
+td{{padding:10px;border-bottom:1px solid #eee;vertical-align:middle;}}
 </style>
-<div class="wrap">
-<table>
-    <thead>
-        <tr>
-            <th>📈 Symbol</th>
-            <th>💰 Price</th>
-            <th>🎯 Target</th>
-            <th>📊 Type</th>
-            <th>🔔 Status</th>
-            <th>📰 News</th>
-            <th>⚙️ Actions</th>
-        </tr>
-    </thead>
-    <tbody>{rows_html}</tbody>
-</table>
-</div>"""
+<div class="wrap"><table>
+<thead><tr>
+<th>📈 Symbol</th><th>💰 Price</th><th>🎯 Target</th>
+<th>📊 Type</th><th>🔔 Status</th><th>📰 News</th><th>⚙️ Actions</th>
+</tr></thead>
+<tbody>{rows_html}</tbody>
+</table></div>"""
 
-table_height = 55 + (len(alert_list) * 58)
+table_height = 55 + (len(alert_list) * 60)
 components.html(table_html, height=table_height, scrolling=False)
 
 # ============================================================
-# HIDDEN BUTTONS — triggered by table button clicks via JS
-# These are invisible but do the real Streamlit work
+# INLINE EDIT FORMS — only shown when editing flag is set
 # ============================================================
-
-st.markdown("""
-<style>
-div[data-testid="stHorizontalBlock"]:has(button[id^="edit_btn_"]),
-div[data-testid="stHorizontalBlock"]:has(button[id^="del_btn_"]) {
-    display: none !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-for i, a in enumerate(alert_list):
-    c1, c2 = st.columns(2)
-    with c1:
-        edit_clicked = st.button("edit", key=f"edit_btn_{i}")
-    with c2:
-        del_clicked = st.button("del", key=f"del_btn_{i}")
-
-    if edit_clicked:
-        st.session_state[f"editing_{a['id']}"] = not st.session_state.get(f"editing_{a['id']}", False)
-        st.rerun()
-
-    if del_clicked:
-        delete_alert(a["id"])
-        st.rerun()
-
-    # Inline edit form — shows when edit is triggered
+for a in alert_list:
     if st.session_state.get(f"editing_{a['id']}", False):
         st.markdown(f"**✏️ Editing {a['symbol']}** — ${a['target']:.2f} {a['type'].upper()}")
         ecol1, ecol2 = st.columns(2)
         with ecol1:
-            new_target = st.number_input(
-                "New Target Price", value=float(a["target"]),
-                min_value=0.01, key=f"nt_{a['id']}"
-            )
+            new_target = st.number_input("New Target Price", value=float(a["target"]), min_value=0.01, key=f"nt_{a['id']}")
         with ecol2:
-            new_type = st.selectbox(
-                "Alert Type", ["above", "below"],
-                index=0 if a["type"] == "above" else 1,
-                key=f"ty_{a['id']}"
-            )
+            new_type = st.selectbox("Alert Type", ["above", "below"], index=0 if a["type"] == "above" else 1, key=f"ty_{a['id']}")
         cA, cB = st.columns(2)
         with cA:
             if st.button("💾 Save", key=f"save_{a['id']}", type="primary", use_container_width=True):
@@ -388,6 +319,7 @@ for i, a in enumerate(alert_list):
             if st.button("✖ Cancel", key=f"cancel_{a['id']}", use_container_width=True):
                 st.session_state[f"editing_{a['id']}"] = False
                 st.rerun()
+        st.markdown("---")
 
 # ============================================================
 # FOOTER

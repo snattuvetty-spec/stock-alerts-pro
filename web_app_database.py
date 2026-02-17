@@ -207,21 +207,6 @@ if st.session_state.current_page == 'add_alert':
     st.stop()
 
 # ============================================================
-# HANDLE QUERY PARAM ACTIONS (edit/delete triggered from table)
-# ============================================================
-params = st.query_params
-if 'action' in params:
-    action = params.get('action')
-    aid = params.get('id')
-    st.query_params.clear()
-    if action == 'delete' and aid:
-        delete_alert(aid)
-        st.rerun()
-    elif action == 'edit' and aid:
-        st.session_state[f'editing_{aid}'] = True
-        st.rerun()
-
-# ============================================================
 # DASHBOARD
 # ============================================================
 
@@ -235,6 +220,9 @@ if not alerts:
 
 import streamlit.components.v1 as components
 
+# ============================================================
+# BUILD ALERT DATA
+# ============================================================
 alert_list = []
 for a in alerts:
     price = get_stock_price(a["symbol"])
@@ -249,85 +237,112 @@ for a in alerts:
             status = "📉 TRIGGERED!"
             status_color = "#e74c3c"
     news_url = f"https://finance.yahoo.com/quote/{a['symbol']}/news"
-    alert_list.append({**a, "current": current, "status": status, "status_color": status_color, "news_url": news_url})
+    alert_list.append({**a, "current": current, "status": status,
+                       "status_color": status_color, "news_url": news_url})
 
-# Build HTML table - buttons navigate via URL query params (works across iframes!)
-rows_html = ""
-for i, a in enumerate(alert_list):
-    bg = "#ffffff" if i % 2 == 0 else "#f7f9fc"
-    type_badge = "🔼 ABOVE" if a["type"] == "above" else "🔽 BELOW"
-    rows_html += f"""
-    <tr style="background:{bg};">
-        <td><strong>{a["symbol"]}</strong></td>
-        <td>{a["current"]}</td>
-        <td>${a["target"]:.2f}</td>
-        <td style="white-space:nowrap;">{type_badge}</td>
-        <td style="color:{a["status_color"]};font-weight:bold;white-space:nowrap;">{a["status"]}</td>
-        <td style="text-align:center;"><a href="{a["news_url"]}" target="_blank" style="font-size:18px;text-decoration:none;">📰</a></td>
-        <td style="white-space:nowrap;">
-            <button onclick="window.top.location.href=window.top.location.pathname+'?action=edit&id={a["id"]}'"
-                style="background:#2E86AB;color:white;border:none;border-radius:4px;padding:6px 12px;cursor:pointer;font-size:13px;margin-right:4px;">
-                ✏️ Edit
-            </button>
-            <button onclick="if(confirm('Delete {a["symbol"]}?'))window.top.location.href=window.top.location.pathname+'?action=delete&id={a["id"]}'"
-                style="background:#e74c3c;color:white;border:none;border-radius:4px;padding:6px 12px;cursor:pointer;font-size:13px;">
-                🗑️ Del
-            </button>
-        </td>
-    </tr>"""
+# ============================================================
+# PURE NATIVE STREAMLIT TABLE
+# Force horizontal layout with CSS override on mobile
+# ============================================================
 
-table_html = f"""<style>
-*{{box-sizing:border-box;margin:0;padding:0;}}
-body{{font-family:Arial,sans-serif;}}
-.wrap{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}}
-table{{min-width:650px;width:100%;border-collapse:collapse;font-size:13px;}}
-th{{background:#2E86AB;color:white;padding:10px;text-align:left;white-space:nowrap;font-size:12px;}}
-td{{padding:10px;border-bottom:1px solid #eee;vertical-align:middle;}}
+st.markdown("""
+<style>
+/* Force ALL columns to stay horizontal - never stack */
+[data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+[data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    min-width: 60px !important;
+    flex-shrink: 0 !important;
+}
+/* Hide the header separator */
+.header-row {
+    background: #2E86AB;
+    color: white;
+    padding: 8px;
+    border-radius: 4px 4px 0 0;
+    margin-bottom: 2px;
+}
 </style>
-<div class="wrap"><table>
-<thead><tr>
-<th>📈 Symbol</th><th>💰 Price</th><th>🎯 Target</th>
-<th>📊 Type</th><th>🔔 Status</th><th>📰 News</th><th>⚙️ Actions</th>
-</tr></thead>
-<tbody>{rows_html}</tbody>
-</table></div>"""
+""", unsafe_allow_html=True)
 
-table_height = 55 + (len(alert_list) * 60)
-components.html(table_html, height=table_height, scrolling=False)
+# Table header
+h = st.columns([2, 1.5, 1.5, 1.5, 2, 0.8, 0.8, 0.8])
+headers = ["📈 Symbol", "💰 Price", "🎯 Target", "📊 Type", "🔔 Status", "📰", "✏️", "🗑️"]
+for col, header in zip(h, headers):
+    col.markdown(f"**{header}**")
+st.divider()
 
-# ============================================================
-# INLINE EDIT FORMS — only shown when editing flag is set
-# ============================================================
-for a in alert_list:
+# Table rows - all native Streamlit buttons
+for i, a in enumerate(alert_list):
+    cols = st.columns([2, 1.5, 1.5, 1.5, 2, 0.8, 0.8, 0.8])
+
+    cols[0].markdown(f"**{a['symbol']}**")
+    cols[1].markdown(a['current'])
+    cols[2].markdown(f"${a['target']:.2f}")
+    cols[3].markdown("🔼" if a['type'] == 'above' else "🔽")
+    cols[4].markdown(f"<span style='color:{a['status_color']}'>{a['status']}</span>",
+                     unsafe_allow_html=True)
+    cols[5].link_button("📰", a['news_url'])
+
+    if cols[6].button("✏️", key=f"edit_{i}", use_container_width=True):
+        # Toggle edit - close others first
+        for other in alert_list:
+            if other['id'] != a['id']:
+                st.session_state[f"editing_{other['id']}"] = False
+        st.session_state[f"editing_{a['id']}"] = not st.session_state.get(f"editing_{a['id']}", False)
+        st.rerun()
+
+    if cols[7].button("🗑️", key=f"del_{i}", use_container_width=True):
+        st.session_state[f"confirm_del_{a['id']}"] = True
+        st.rerun()
+
+    # Delete confirmation
+    if st.session_state.get(f"confirm_del_{a['id']}", False):
+        st.warning(f"⚠️ Delete **{a['symbol']}** alert?")
+        dc1, dc2 = st.columns(2)
+        if dc1.button("✅ Yes, Delete", key=f"yes_del_{a['id']}", type="primary", use_container_width=True):
+            delete_alert(a['id'])
+            st.session_state[f"confirm_del_{a['id']}"] = False
+            st.rerun()
+        if dc2.button("❌ Cancel", key=f"no_del_{a['id']}", use_container_width=True):
+            st.session_state[f"confirm_del_{a['id']}"] = False
+            st.rerun()
+
+    # Inline edit form
     if st.session_state.get(f"editing_{a['id']}", False):
-        st.markdown(f"**✏️ Editing {a['symbol']}** — ${a['target']:.2f} {a['type'].upper()}")
-        ecol1, ecol2 = st.columns(2)
-        with ecol1:
-            new_target = st.number_input("New Target Price", value=float(a["target"]), min_value=0.01, key=f"nt_{a['id']}")
-        with ecol2:
-            new_type = st.selectbox("Alert Type", ["above", "below"], index=0 if a["type"] == "above" else 1, key=f"ty_{a['id']}")
-        cA, cB = st.columns(2)
-        with cA:
-            if st.button("💾 Save", key=f"save_{a['id']}", type="primary", use_container_width=True):
-                if update_alert(a["id"], new_target, new_type):
+        with st.container():
+            st.markdown(f"**✏️ Editing {a['symbol']}**")
+            ecol1, ecol2 = st.columns(2)
+            with ecol1:
+                new_target = st.number_input("New Target Price",
+                    value=float(a["target"]), min_value=0.01, key=f"nt_{a['id']}")
+            with ecol2:
+                new_type = st.selectbox("Alert Type", ["above", "below"],
+                    index=0 if a["type"] == "above" else 1, key=f"ty_{a['id']}")
+            cA, cB = st.columns(2)
+            with cA:
+                if st.button("💾 Save", key=f"save_{a['id']}", type="primary", use_container_width=True):
+                    if update_alert(a["id"], new_target, new_type):
+                        st.session_state[f"editing_{a['id']}"] = False
+                        st.success("✅ Updated!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Update failed")
+            with cB:
+                if st.button("✖ Cancel", key=f"cancel_{a['id']}", use_container_width=True):
                     st.session_state[f"editing_{a['id']}"] = False
-                    st.success("✅ Updated!")
                     st.rerun()
-                else:
-                    st.error("❌ Update failed")
-        with cB:
-            if st.button("✖ Cancel", key=f"cancel_{a['id']}", use_container_width=True):
-                st.session_state[f"editing_{a['id']}"] = False
-                st.rerun()
         st.markdown("---")
 
 # ============================================================
 # FOOTER
 # ============================================================
-
 st.markdown("""
 <div style="text-align:center;color:gray;font-size:12px;margin-top:30px;">
 © 2026 Natts Digital — Stock Alerts Pro<br>
-⚠️ Price notifications only. Not financial advice. Consult a licensed financial advisor.
+⚠️ Price notifications only. Not financial advice.
 </div>
 """, unsafe_allow_html=True)

@@ -241,73 +241,83 @@ for a in alerts:
                        "status_color": status_color, "news_url": news_url})
 
 # ============================================================
-# PURE NATIVE STREAMLIT TABLE
-# Force horizontal layout with CSS override on mobile
+# SINGLE HTML TABLE — entire table scrolls together on mobile
+# Action buttons use st.radio as a selector trick
 # ============================================================
 
-st.markdown("""
-<style>
-/* Force ALL columns to stay horizontal - never stack */
-[data-testid="stHorizontalBlock"] {
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-}
-[data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-    min-width: 60px !important;
-    flex-shrink: 0 !important;
-}
-/* Hide the header separator */
-.header-row {
-    background: #2E86AB;
-    color: white;
-    padding: 8px;
-    border-radius: 4px 4px 0 0;
-    margin-bottom: 2px;
-}
-</style>
-""", unsafe_allow_html=True)
+# Check which alert action was selected
+selected_action = st.session_state.get("selected_action", None)
+selected_id = st.session_state.get("selected_id", None)
 
-# Table header
-h = st.columns([2, 1.5, 1.5, 1.5, 2, 0.8, 0.8, 0.8])
-headers = ["📈 Symbol", "💰 Price", "🎯 Target", "📊 Type", "🔔 Status", "📰", "✏️", "🗑️"]
-for col, header in zip(h, headers):
-    col.markdown(f"**{header}**")
-st.divider()
-
-# Table rows - all native Streamlit buttons
+rows_html = ""
 for i, a in enumerate(alert_list):
-    cols = st.columns([2, 1.5, 1.5, 1.5, 2, 0.8, 0.8, 0.8])
+    bg = "#ffffff" if i % 2 == 0 else "#f7f9fc"
+    type_badge = "🔼" if a["type"] == "above" else "🔽"
+    rows_html += f"""
+    <tr style="background:{bg}; border-bottom:1px solid #eee;">
+        <td style="padding:10px 8px;font-weight:bold;">{a["symbol"]}</td>
+        <td style="padding:10px 8px;">{a["current"]}</td>
+        <td style="padding:10px 8px;">${a["target"]:.2f}</td>
+        <td style="padding:10px 8px;text-align:center;">{type_badge}</td>
+        <td style="padding:10px 8px;color:{a["status_color"]};font-weight:bold;white-space:nowrap;">{a["status"]}</td>
+        <td style="padding:10px 8px;text-align:center;">
+            <a href="{a["news_url"]}" target="_blank" style="font-size:16px;text-decoration:none;">📰</a>
+        </td>
+    </tr>"""
 
-    cols[0].markdown(f"**{a['symbol']}**")
-    cols[1].markdown(a['current'])
-    cols[2].markdown(f"${a['target']:.2f}")
-    cols[3].markdown("🔼" if a['type'] == 'above' else "🔽")
-    cols[4].markdown(f"<span style='color:{a['status_color']}'>{a['status']}</span>",
-                     unsafe_allow_html=True)
-    cols[5].link_button("📰", a['news_url'])
+table_html = f"""<style>
+*{{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif;}}
+.wrap{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #e0e0e0;border-radius:8px;}}
+table{{min-width:480px;width:100%;border-collapse:collapse;font-size:13px;}}
+th{{background:#2E86AB;color:white;padding:10px 8px;text-align:left;white-space:nowrap;font-size:12px;}}
+td{{vertical-align:middle;}}
+tr:hover{{background:#f0f7fb !important;}}
+</style>
+<div class="wrap"><table>
+<thead><tr>
+<th>📈 Symbol</th><th>💰 Price</th><th>🎯 Target</th>
+<th>📊 Type</th><th>🔔 Status</th><th>📰 News</th>
+</tr></thead>
+<tbody>{rows_html}</tbody>
+</table></div>"""
 
-    if cols[6].button("✏️", key=f"edit_{i}", use_container_width=True):
-        # Toggle edit - close others first
-        for other in alert_list:
-            if other['id'] != a['id']:
-                st.session_state[f"editing_{other['id']}"] = False
-        st.session_state[f"editing_{a['id']}"] = not st.session_state.get(f"editing_{a['id']}", False)
-        st.rerun()
+table_height = 55 + (len(alert_list) * 52)
+components.html(table_html, height=table_height, scrolling=False)
 
-    if cols[7].button("🗑️", key=f"del_{i}", use_container_width=True):
-        st.session_state[f"confirm_del_{a['id']}"] = True
-        st.rerun()
+# ============================================================
+# NATIVE ACTION ROW — one clean row per alert with working buttons
+# This is BELOW the table, no scrolling issues
+# ============================================================
+
+st.markdown("**⚙️ Manage Alerts:**")
+for i, a in enumerate(alert_list):
+    c1, c2, c3 = st.columns([3, 1, 1])
+    with c1:
+        badge = "🔼" if a["type"] == "above" else "🔽"
+        st.markdown(f"**{a['symbol']}** {badge} ${a['target']:.2f}")
+    with c2:
+        if st.button("✏️ Edit", key=f"edit_{i}", use_container_width=True):
+            # Toggle edit, close others
+            for other in alert_list:
+                if other["id"] != a["id"]:
+                    st.session_state[f"editing_{other['id']}"] = False
+                    st.session_state[f"confirm_del_{other['id']}"] = False
+            st.session_state[f"editing_{a['id']}"] = not st.session_state.get(f"editing_{a['id']}", False)
+            st.rerun()
+    with c3:
+        if st.button("🗑️ Del", key=f"del_{i}", use_container_width=True):
+            st.session_state[f"confirm_del_{a['id']}"] = True
+            st.rerun()
 
     # Delete confirmation
     if st.session_state.get(f"confirm_del_{a['id']}", False):
-        st.warning(f"⚠️ Delete **{a['symbol']}** alert?")
+        st.warning(f"Delete **{a['symbol']}** alert?")
         dc1, dc2 = st.columns(2)
-        if dc1.button("✅ Yes, Delete", key=f"yes_del_{a['id']}", type="primary", use_container_width=True):
-            delete_alert(a['id'])
+        if dc1.button(f"✅ Yes Delete", key=f"yes_{a['id']}", type="primary", use_container_width=True):
+            delete_alert(a["id"])
             st.session_state[f"confirm_del_{a['id']}"] = False
             st.rerun()
-        if dc2.button("❌ Cancel", key=f"no_del_{a['id']}", use_container_width=True):
+        if dc2.button("❌ No", key=f"no_{a['id']}", use_container_width=True):
             st.session_state[f"confirm_del_{a['id']}"] = False
             st.rerun()
 
@@ -335,7 +345,6 @@ for i, a in enumerate(alert_list):
                 if st.button("✖ Cancel", key=f"cancel_{a['id']}", use_container_width=True):
                     st.session_state[f"editing_{a['id']}"] = False
                     st.rerun()
-        st.markdown("---")
 
 # ============================================================
 # FOOTER

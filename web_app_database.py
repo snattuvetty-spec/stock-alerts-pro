@@ -333,5 +333,5 @@ for a in alerts:
 # ============================================================
 
 st.markdown("---")
-st.caption("© Natts Digital - Alerts Only. Not Financial Advice.")
+st.caption("© Natts Digital - Alerts Only. Not Financial Advice. Pls consult your Financial Advisor for any investment decisions.")
 

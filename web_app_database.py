@@ -1,64 +1,21 @@
 
-# ============================================================
-# ULTRA PRO STOCK ALERTS APP (DESKTOP + MOBILE FRIENDLY)
-# Clean Streamlit-native layout (NO HTML TABLE BREAKS)
-# ============================================================
-
 import streamlit as st
+from supabase import create_client, Client
+import requests
 
 # ============================================================
-# MOCK FUNCTIONS (KEEP YOUR ORIGINAL BACKEND FUNCTIONS HERE)
-# Replace these with your real Supabase / API functions
+# CONFIG
 # ============================================================
-
-def get_user_alerts(username):
-    # Example structure — replace with real DB call
-    return st.session_state.get("demo_alerts",[
-        {"id":1,"symbol":"LAES","target":4.00,"type":"above"},
-        {"id":2,"symbol":"QBTS","target":17.50,"type":"below"},
-        {"id":3,"symbol":"BTQ","target":2.70,"type":"below"},
-        {"id":4,"symbol":"UEC","target":15.50,"type":"above"},
-    ])
-
-def delete_alert(alert_id):
-    alerts = get_user_alerts("demo")
-    st.session_state.demo_alerts = [a for a in alerts if a["id"] != alert_id]
-
-def get_stock_price(symbol):
-    # Replace with real price fetch
-    demo_prices = {
-        "LAES":3.85,
-        "QBTS":19.67,
-        "BTQ":2.78,
-        "UEC":15.52
-    }
-    return demo_prices.get(symbol,None)
-
-# ============================================================
-# PAGE CONFIG
-# ============================================================
-
 st.set_page_config(page_title="Stock Alerts Pro", layout="wide")
-st.markdown("""
-<style>
-.scroll-row {
-    overflow-x: auto;
-    white-space: nowrap;
-    padding-bottom: 8px;
-}
 
-.scroll-inner {
-    min-width: 750px;   /* forces horizontal scroll on mobile */
-}
-</style>
-""", unsafe_allow_html=True)
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
-
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ============================================================
-# SIMPLE LOGIN (FIELD READY — NO AUTO LOGIN MAGIC)
+# SIMPLE LOGIN
 # ============================================================
-
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
@@ -70,7 +27,6 @@ if not st.session_state.logged_in:
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        # Replace with real auth
         if username:
             st.session_state.logged_in = True
             st.session_state.username = username
@@ -79,125 +35,177 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ============================================================
-# TOP NAV (MOBILE + DESKTOP)
+# HELPERS
 # ============================================================
+def get_user_alerts(username):
+    try:
+        res = supabase.table("alerts").select("*").eq("username", username).execute()
+        return res.data or []
+    except:
+        return []
 
-username = st.session_state.username
+def delete_alert(alert_id):
+    try:
+        supabase.table("alerts").delete().eq("id", alert_id).execute()
+    except:
+        pass
 
-nav1, nav2, nav3 = st.columns([6,1,1])
+def get_stock_price(symbol):
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        r = requests.get(url, timeout=5)
+        data = r.json()
+        return data["chart"]["result"][0]["meta"]["regularMarketPrice"]
+    except:
+        return None
 
-with nav1:
-    st.markdown(f"👋 **{username}**")
+# ============================================================
+# HEADER
+# ============================================================
+st.markdown(f"👋 **{st.session_state.username}**")
 
-with nav2:
-    if st.button("➕"):
-        st.info("Add alert page coming next 🙂")
-
-with nav3:
+top1, top2, top3 = st.columns([1,1,1])
+with top1:
+    st.button("🏠", key="home_btn")
+with top2:
+    st.button("➕", key="add_btn")
+with top3:
     if st.button("🚪"):
         st.session_state.logged_in = False
         st.rerun()
 
-# ============================================================
-# DASHBOARD
-# ============================================================
-
 st.title("📊 Dashboard")
 
-alerts = get_user_alerts(username)
+alerts = get_user_alerts(st.session_state.username)
 
 if not alerts:
     st.info("No alerts yet.")
     st.stop()
 
 # ============================================================
-# ULTRA PRO DASHBOARD LOOP
-# Works PERFECT on Desktop + Mobile
+# ULTRA PRO V4 TABLE (HORIZONTAL MOBILE SCROLL)
 # ============================================================
+
+st.markdown("""
+<style>
+.table-wrap {
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+}
+.alert-table {
+    min-width:700px;
+    width:100%;
+    border-collapse:collapse;
+}
+.alert-table th {
+    background:#2E86AB;
+    color:white;
+    padding:10px;
+    text-align:left;
+}
+.alert-table td {
+    padding:12px;
+    border-bottom:1px solid #eee;
+}
+</style>
+""", unsafe_allow_html=True)
+
+rows_html = ""
 
 for a in alerts:
 
     price = get_stock_price(a["symbol"])
+    price_txt = f"${price:.2f}" if price else "N/A"
 
-    st.markdown('<div class="scroll-row"><div class="scroll-inner">', unsafe_allow_html=True)
+    rows_html += f"""
+    <tr>
+        <td><b>{a['symbol']}</b></td>
+        <td>{price_txt}</td>
+        <td>${a['target']:.2f} ({a['type']})</td>
+        <td><a href="https://finance.yahoo.com/quote/{a['symbol']}/news" target="_blank">📰 News</a></td>
+        <td>EDIT_{a['id']}</td>
+        <td>DEL_{a['id']}</td>
+    </tr>
+    """
 
-    col1, col2, col3, col4, col5, col6 = st.columns(
-        [2.2, 1.2, 2.2, 1.2, 1.2, 1.2]
-    )
+table_html = f"""
+<div class="table-wrap">
+<table class="alert-table">
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Price</th>
+<th>Target</th>
+<th>News</th>
+<th>Edit</th>
+<th>Delete</th>
+</tr>
+</thead>
+<tbody>
+{rows_html}
+</tbody>
+</table>
+</div>
+"""
 
-    with col1:
-        st.markdown(f"**{a['symbol']}**")
+import streamlit.components.v1 as components
+components.html(table_html, height=80 + len(alerts)*60, scrolling=True)
 
-    with col2:
-        st.markdown(f"${price:.2f}" if price else "N/A")
+# ============================================================
+# ACTION BUTTONS
+# ============================================================
 
-    with col3:
-        st.markdown(f"${a['target']:.2f} ({a['type']})")
+st.divider()
 
-    with col4:
-        st.link_button(
-            "📰 News",
-            f"https://finance.yahoo.com/quote/{a['symbol']}/news"
-        )
+for a in alerts:
 
-    with col5:
+    c1, c2, c3 = st.columns([2,1,1])
+
+    with c1:
+        st.write(f"**{a['symbol']}**")
+
+    with c2:
         if st.button("✏️ Edit", key=f"edit_{a['id']}"):
             st.session_state[f"editing_{a['id']}"] = True
 
-    with col6:
+    with c3:
         if st.button("🗑 Delete", key=f"del_{a['id']}"):
             delete_alert(a["id"])
             st.rerun()
 
-    st.markdown("</div></div>", unsafe_allow_html=True)
-
-    # INLINE EDIT PANEL
     if st.session_state.get(f"editing_{a['id']}", False):
 
         new_target = st.number_input(
-            "Target",
+            "New Target",
             value=float(a["target"]),
-            key=f"nt_{a['id']}"
+            key=f"target_{a['id']}"
         )
 
         new_type = st.selectbox(
             "Type",
             ["above","below"],
             index=0 if a["type"]=="above" else 1,
-            key=f"ty_{a['id']}"
+            key=f"type_{a['id']}"
         )
 
-        cA, cB = st.columns(2)
+        if st.button("💾 Save", key=f"save_{a['id']}"):
+            supabase.table("alerts").update({
+                "target": new_target,
+                "type": new_type
+            }).eq("id", a["id"]).execute()
 
-        with cA:
-            if st.button("💾 Save", key=f"save_{a['id']}"):
-                supabase.table("alerts").update({
-                    "target": new_target,
-                    "type": new_type
-                }).eq("id", a["id"]).execute()
-
-                st.session_state[f"editing_{a['id']}"] = False
-                st.rerun()
-
-        with cB:
-            if st.button("Cancel", key=f"cancel_{a['id']}"):
-                st.session_state[f"editing_{a['id']}"] = False
-                st.rerun()
+            st.session_state[f"editing_{a['id']}"] = False
+            st.rerun()
 
     st.divider()
-
-
 
 # ============================================================
 # FOOTER
 # ============================================================
-
-st.markdown(
-"""
-<div style="text-align:center;color:gray;font-size:12px;">
+st.markdown("""
+<div style='text-align:center;color:#999;font-size:12px;padding:20px'>
 © Natts Digital — Alerts Only. Not Financial Advice.<br>
 Pls consult a financial advisor before making any investment decisions.
 </div>
-""",
-unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)

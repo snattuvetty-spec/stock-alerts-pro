@@ -219,91 +219,153 @@ if not alerts:
     st.stop()
 
 # ============================================================
-# TABLE HEADER - Scrolls with content on mobile
+# BUILD ALERT DATA WITH PRICES
 # ============================================================
 
-st.markdown('<div class="scroll-wrapper">', unsafe_allow_html=True)
+import streamlit.components.v1 as components
 
-# Header row
-hcol1, hcol2, hcol3, hcol4, hcol5, hcol6 = st.columns([2.2, 1.2, 2.2, 1.2, 1.2, 1.2])
-with hcol1:
-    st.markdown("**📈 Symbol**")
-with hcol2:
-    st.markdown("**💰 Price**")
-with hcol3:
-    st.markdown("**🎯 Target**")
-with hcol4:
-    st.markdown("**📰 News**")
-with hcol5:
-    st.markdown("**✏️ Edit**")
-with hcol6:
-    st.markdown("**🗑️ Delete**")
-
-st.divider()
-
-# ============================================================
-# ALERT ROWS - Each alert in one horizontal row
-# ============================================================
-
+alert_list = []
 for a in alerts:
     price = get_stock_price(a["symbol"])
-    
-    col1, col2, col3, col4, col5, col6 = st.columns([2.2, 1.2, 2.2, 1.2, 1.2, 1.2])
-    
+    current = f"${price:.2f}" if price else "—"
+
+    # Determine status
+    status = "⏳ Waiting"
+    status_color = "#888"
+    if price:
+        if a['type'] == 'above' and price >= a['target']:
+            status = "🚀 TRIGGERED!"
+            status_color = "#27ae60"
+        elif a['type'] == 'below' and price <= a['target']:
+            status = "📉 TRIGGERED!"
+            status_color = "#e74c3c"
+
+    news_url = f"https://finance.yahoo.com/quote/{a['symbol']}/news"
+
+    alert_list.append({
+        **a,
+        'current': current,
+        'status': status,
+        'status_color': status_color,
+        'news_url': news_url,
+    })
+
+# ============================================================
+# HTML TABLE — renders identically on mobile and desktop
+# ============================================================
+
+rows_html = ""
+for i, a in enumerate(alert_list):
+    bg = "#ffffff" if i % 2 == 0 else "#f7f9fc"
+    type_badge = "🔼 ABOVE" if a['type'] == 'above' else "🔽 BELOW"
+    rows_html += f"""
+    <tr style="background:{bg};">
+        <td><strong>{a['symbol']}</strong></td>
+        <td>{a['current']}</td>
+        <td>${a['target']:.2f}</td>
+        <td style="white-space:nowrap;">{type_badge}</td>
+        <td style="color:{a['status_color']};font-weight:bold;white-space:nowrap;">{a['status']}</td>
+        <td style="text-align:center;">
+            <a href="{a['news_url']}" target="_blank"
+               style="text-decoration:none;font-size:18px;">&#128240;</a>
+        </td>
+        <td style="white-space:nowrap;">
+            <button onclick="window.parent.postMessage({{action:'edit',id:'{a['id']}'}}, '*')"
+                style="background:#2E86AB;color:white;border:none;border-radius:4px;
+                       padding:6px 12px;cursor:pointer;font-size:13px;margin-right:4px;">
+                &#9999; Edit
+            </button>
+            <button onclick="window.parent.postMessage({{action:'delete',id:'{a['id']}'}}, '*')"
+                style="background:#e74c3c;color:white;border:none;border-radius:4px;
+                       padding:6px 12px;cursor:pointer;font-size:13px;">
+                &#128465; Del
+            </button>
+        </td>
+    </tr>"""
+
+table_html = f"""
+<style>
+    * {{ box-sizing:border-box; margin:0; padding:0; }}
+    body {{ font-family: Arial, sans-serif; }}
+    .wrap {{
+        width:100%;
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+    }}
+    table {{
+        min-width:650px;
+        width:100%;
+        border-collapse:collapse;
+        font-size:13px;
+    }}
+    th {{
+        background:#2E86AB;
+        color:white;
+        padding:10px 10px;
+        text-align:left;
+        white-space:nowrap;
+        font-size:12px;
+    }}
+    td {{
+        padding:10px 10px;
+        border-bottom:1px solid #eee;
+        vertical-align:middle;
+    }}
+</style>
+<div class="wrap">
+<table>
+    <thead>
+        <tr>
+            <th>📈 Symbol</th>
+            <th>💰 Price</th>
+            <th>🎯 Target</th>
+            <th>📊 Type</th>
+            <th>🔔 Status</th>
+            <th>📰 News</th>
+            <th>⚙️ Actions</th>
+        </tr>
+    </thead>
+    <tbody>{rows_html}</tbody>
+</table>
+</div>"""
+
+table_height = 55 + (len(alert_list) * 58)
+components.html(table_html, height=table_height, scrolling=False)
+
+# ============================================================
+# NATIVE STREAMLIT EDIT / DELETE BUTTONS
+# (Table buttons are visual only — these do the real work)
+# ============================================================
+
+st.markdown("---")
+for i, a in enumerate(alert_list):
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
-        st.markdown(f"**{a['symbol']}**")
-    
+        st.markdown(f"**{a['symbol']}** — ${a['target']:.2f} {a['type'].upper()}")
     with col2:
-        if price:
-            st.markdown(f"${price:.2f}")
-        else:
-            st.markdown("—")
-    
-    with col3:
-        st.markdown(f"${a['target']:.2f} ({a['type'].upper()})")
-    
-    with col4:
-        st.link_button(
-            "📰",
-            f"https://finance.yahoo.com/quote/{a['symbol']}/news",
-            use_container_width=True
-        )
-    
-    with col5:
-        if st.button("✏️", key=f"edit_{a['id']}", use_container_width=True):
+        if st.button("✏️ Edit", key=f"edit_{i}", use_container_width=True):
             st.session_state[f"editing_{a['id']}"] = True
-    
-    with col6:
-        if st.button("🗑️", key=f"del_{a['id']}", use_container_width=True):
-            if delete_alert(a["id"]):
-                st.rerun()
-            else:
-                st.error("Failed to delete")
-    
-    # INLINE EDIT PANEL (appears below the row when edit is clicked)
+    with col3:
+        if st.button("🗑️ Del", key=f"del_{i}", use_container_width=True):
+            delete_alert(a["id"])
+            st.rerun()
+
+    # Inline edit form
     if st.session_state.get(f"editing_{a['id']}", False):
         st.markdown(f"**✏️ Editing {a['symbol']}**")
-        
         ecol1, ecol2 = st.columns(2)
-        
         with ecol1:
             new_target = st.number_input(
-                "New Target Price",
-                value=float(a["target"]),
-                min_value=0.01,
-                key=f"nt_{a['id']}"
+                "New Target Price", value=float(a["target"]),
+                min_value=0.01, key=f"nt_{a['id']}"
             )
-        
         with ecol2:
             new_type = st.selectbox(
-                "Alert Type",
-                ["above", "below"],
+                "Alert Type", ["above", "below"],
                 index=0 if a["type"] == "above" else 1,
                 key=f"ty_{a['id']}"
             )
-        
         cA, cB = st.columns(2)
-        
         with cA:
             if st.button("💾 Save", key=f"save_{a['id']}", type="primary", use_container_width=True):
                 if update_alert(a["id"], new_target, new_type):
@@ -312,15 +374,11 @@ for a in alerts:
                     st.rerun()
                 else:
                     st.error("❌ Update failed")
-        
         with cB:
             if st.button("✖ Cancel", key=f"cancel_{a['id']}", use_container_width=True):
                 st.session_state[f"editing_{a['id']}"] = False
                 st.rerun()
-    
-    st.divider()
-
-st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("---")
 
 # ============================================================
 # FOOTER

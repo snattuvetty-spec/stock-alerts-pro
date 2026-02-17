@@ -166,7 +166,9 @@ if st.session_state.current_page=="add":
     symbol = st.text_input("Symbol").upper()
 
     if symbol:
-        price = get_stock_price(symbol)
+        stock = get_stock_price(symbol)
+        price = stock["price"] if stock else None
+
         if price:
             st.metric("Current Price", f"${price:.2f}")
 
@@ -184,21 +186,23 @@ if st.session_state.current_page=="add":
 # =====================================================
 # DASHBOARD
 # =====================================================
+    if st.session_state.get("logged_in"):
 
-else:
+        username = st.session_state.username
+    
+        st.title("📊 Dashboard")
 
-    st.title("📊 Dashboard")
+        alerts = get_user_alerts(username)
 
-    alerts = get_user_alerts(username)
-
-    if not alerts:
-        st.info("No alerts yet.")
-        st.stop()
+        if not alerts:
+            st.info("No alerts yet.")
+            st.stop()
 
     # MOBILE SCROLL WRAPPER
     st.markdown('<div class="mobile-table">', unsafe_allow_html=True)
 
     for a in alerts:
+       
 
         price = get_stock_price(a["symbol"])
 
@@ -210,12 +214,15 @@ else:
             <div class="mobile-cell">${a['target']:.2f} ({a['type']})</div>
         </div>
         """, unsafe_allow_html=True)
-
+    
         # ACTION BUTTONS (REAL STREAMLIT)
         c1,c2,c3 = st.columns(3)
-
+        
         with c1:
-            st.link_button("📰 News",f"https://finance.yahoo.com/quote/{a['symbol']}/news",key=f"news_{a['id']}")
+            st.markdown(
+            f'<a href="https://finance.yahoo.com/quote/{a["symbol"]}/news" target="_blank">📰 News</a>',
+            unsafe_allow_html=True
+)
 
         with c2:
             if st.button("✏️ Edit",key=f"edit_{a['id']}"):
@@ -225,6 +232,8 @@ else:
             if st.button("🗑 Delete",key=f"del_{a['id']}"):
                 delete_alert(a["id"])
                 st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True) 
 
         # INLINE EDIT PANEL
         if st.session_state.get(f"editing_{a['id']}",False):

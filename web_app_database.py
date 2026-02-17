@@ -137,20 +137,74 @@ if not st.session_state.logged_in:
 
 username = st.session_state.username
 
-nav1, nav2, nav3 = st.columns([6,1,1])
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = 'dashboard'
+
+nav1, nav2, nav3, nav4 = st.columns([5, 1.2, 1.2, 1.2])
 
 with nav1:
     st.markdown(f"👋 **{username}**")
 
 with nav2:
-    if st.button("➕ Add"):
-        st.session_state.current_page = 'add_alert'
+    if st.button("🏠 Dash", use_container_width=True):
+        st.session_state.current_page = 'dashboard'
         st.rerun()
 
 with nav3:
-    if st.button("🚪 Logout"):
+    if st.button("➕ Add", use_container_width=True):
+        st.session_state.current_page = 'add_alert'
+        st.rerun()
+
+with nav4:
+    if st.button("🚪 Exit", use_container_width=True):
         st.session_state.logged_in = False
         st.rerun()
+
+# ============================================================
+# ADD ALERT PAGE
+# ============================================================
+
+if st.session_state.current_page == 'add_alert':
+    st.title("➕ Add New Alert")
+
+    if st.button("← Back to Dashboard"):
+        st.session_state.current_page = 'dashboard'
+        st.rerun()
+
+    with st.form("add_alert_form"):
+        symbol = st.text_input("Stock Symbol (e.g. AAPL, TSLA, BTQ)").upper().strip()
+        target = st.number_input("Target Price ($)", min_value=0.01, value=10.00)
+        alert_type = st.selectbox("Alert When Price Goes", ["above", "below"])
+        add_submit = st.form_submit_button("✅ Create Alert", type="primary", use_container_width=True)
+
+    if add_submit:
+        if not symbol:
+            st.error("❌ Please enter a stock symbol")
+        else:
+            # Check current price
+            price = get_stock_price(symbol)
+            if price:
+                st.metric(f"{symbol} Current Price", f"${price:.2f}")
+            else:
+                st.warning("⚠️ Could not verify symbol — alert will still be created")
+
+            try:
+                supabase.table('alerts').insert({
+                    'username': username,
+                    'symbol': symbol,
+                    'target': target,
+                    'type': alert_type,
+                    'enabled': True
+                }).execute()
+                st.success(f"✅ Alert created! Notify when {symbol} goes {alert_type} ${target:.2f}")
+                import time
+                time.sleep(1)
+                st.session_state.current_page = 'dashboard'
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Failed to create alert: {str(e)}")
+
+    st.stop()
 
 # ============================================================
 # DASHBOARD

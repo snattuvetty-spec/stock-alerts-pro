@@ -103,82 +103,71 @@ if not alerts:
 for a in alerts:
 
     price = get_stock_price(a["symbol"])
-    price_text = f"${price:.2f}" if price else "N/A"
 
-    with st.container():
+    # ===== ULTRA PRO RESPONSIVE ROW =====
+    col1, col2, col3, col4, col5, col6 = st.columns(
+        [2.2, 1.2, 2.2, 1.2, 1.2, 1.2]
+    )
 
-        # ---------------------
-        # ROW HEADER
-        # ---------------------
-        col1, col2, col3 = st.columns([2,1,2])
+    with col1:
+        st.markdown(f"**{a['symbol']}**")
 
-        with col1:
-            st.markdown(f"**{a['symbol']}**")
+    with col2:
+        st.markdown(f"${price:.2f}" if price else "N/A")
 
-        with col2:
-            st.markdown(price_text)
+    with col3:
+        st.markdown(f"${a['target']:.2f} ({a['type']})")
 
-        with col3:
-            st.markdown(f"${a['target']:.2f} ({a['type']})")
+    with col4:
+        st.link_button(
+            "📰",
+            f"https://finance.yahoo.com/quote/{a['symbol']}/news"
+        )
 
-        # ---------------------
-        # ACTION BUTTONS
-        # ---------------------
-        b1, b2, b3 = st.columns(3)
+    with col5:
+        if st.button("✏️", key=f"edit_{a['id']}"):
+            st.session_state[f"editing_{a['id']}"] = True
 
-        with b1:
-            st.link_button(
-                "📰 News",
-                f"https://finance.yahoo.com/quote/{a['symbol']}/news",
-                
-            )
+    with col6:
+        if st.button("🗑", key=f"del_{a['id']}"):
+            delete_alert(a["id"])
+            st.rerun()
 
-        with b2:
-            if st.button("✏️ Edit", key=f"edit_{a['id']}"):
-                st.session_state[f"editing_{a['id']}"] = True
+    # ===== INLINE EDIT PANEL =====
+    if st.session_state.get(f"editing_{a['id']}", False):
 
-        with b3:
-            if st.button("🗑 Delete", key=f"del_{a['id']}"):
-                delete_alert(a["id"])
+        new_target = st.number_input(
+            "Target",
+            value=float(a["target"]),
+            key=f"nt_{a['id']}"
+        )
+
+        new_type = st.selectbox(
+            "Type",
+            ["above","below"],
+            index=0 if a["type"]=="above" else 1,
+            key=f"ty_{a['id']}"
+        )
+
+        cA, cB = st.columns(2)
+
+        with cA:
+            if st.button("💾 Save", key=f"save_{a['id']}"):
+                supabase.table("alerts").update({
+                    "target": new_target,
+                    "type": new_type
+                }).eq("id", a["id"]).execute()
+
+                st.session_state[f"editing_{a['id']}"] = False
                 st.rerun()
 
-        # ---------------------
-        # INLINE EDIT PANEL
-        # ---------------------
-        if st.session_state.get(f"editing_{a['id']}", False):
+        with cB:
+            if st.button("Cancel", key=f"cancel_{a['id']}"):
+                st.session_state[f"editing_{a['id']}"] = False
+                st.rerun()
 
-            new_target = st.number_input(
-                "New Target",
-                value=float(a["target"]),
-                key=f"new_target_{a['id']}"
-            )
+    st.divider()
 
-            new_type = st.selectbox(
-                "Type",
-                ["above","below"],
-                index=0 if a["type"]=="above" else 1,
-                key=f"new_type_{a['id']}"
-            )
-
-            s1,s2 = st.columns(2)
-
-            with s1:
-                if st.button("💾 Save", key=f"save_{a['id']}"):
-                    # Replace with real DB update
-                    for alert in alerts:
-                        if alert["id"] == a["id"]:
-                            alert["target"] = new_target
-                            alert["type"] = new_type
-
-                    st.session_state[f"editing_{a['id']}"] = False
-                    st.rerun()
-
-            with s2:
-                if st.button("Cancel", key=f"cancel_{a['id']}"):
-                    st.session_state[f"editing_{a['id']}"] = False
-                    st.rerun()
-
-        st.divider()
 
 # ============================================================
 # FOOTER
